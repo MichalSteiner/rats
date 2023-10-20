@@ -15,7 +15,6 @@ To use this code, there are several options:
 Easiest is to use the load_all() function, which assumes directory setup by single_use functions.
 There exist also load_night and load_instrument functions to load a given night or given instrument.
 Finally, a single load_spectrum function can be used on individiual filename to load. 
-
 The S1D and S2D spectra are providing masking pixels with negative flux and nans using the Spectrum1D.mask | SpectrumCollection.mask attributes. However, these are not applied by default, and actual masking of these pixels is requested by the user.
 
 Currently the tested version of DRS pipeline are 3.0.0 of ESPRESSO DRS. If different format is used, will raise an exception. You can try and test other version of DRS by commenting/removing the DRS check, but the pipeline is not tested there.
@@ -140,7 +139,7 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     sp.SpectrumCollection
         SpectrumCollection (S2D format) with n_orders x n_pixels shape. It is corrected for the dispersion effect on the S2D spectra using the eso._correct_dispersion_S2D() method.
     """
-    fits_header = fits_hdulist[0].header # Preparing header of spectra
+    main_header = fits_hdulist[0].header # Preparing header of spectra
     flux = fits_hdulist['SCIDATA'].data # Flux array
     flux_err = fits_hdulist['ERRDATA'].data # Flux error array
     wavelength_air = fits_hdulist['WAVEDATA_AIR_BARY'].data # Wavedata - air (ground instruments)

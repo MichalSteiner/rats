@@ -21,7 +21,7 @@ import os
 import astropy.units as u
 import pyvo as vo
 import batman
-from astropy.nddata import NDData,StdDevUncertainty
+from astropy.nddata import NDData,StdDevUncertainty, NDDataArray
 import rats.spectra_manipulation as sm
 import termcolor as tc
 import pandas as pd
@@ -49,6 +49,32 @@ Header = fits.header.Header
 # System parameter object - Will not throw errors as each function expect different set of parameters only
 SystemParameters = Any
 
+#%%
+class StellarParameters():
+    pass
+
+class PlanetParameters():
+    pass
+
+class SystemParameters_test():
+    pass
+
+class CompositeTable():
+    pass
+
+class FullTable():
+    pass
+
+class SystemParameters_full_test():
+    pass
+
+class EphemerisPlanet():
+    pass
+
+_test = NDDataArray(
+    10,
+    uncertainty = StdDevUncertainty(1)
+    )
 
 #%% find_nearest
 @disable_func

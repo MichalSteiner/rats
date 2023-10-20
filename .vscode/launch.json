@@ -12,7 +12,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {
-                "PYTHONPATH": "/media/chamaeleontis/Observatory_main/Code/rats:/media/chamaeleontis/Observatory_main/Code/observations_transits",
+                "PYTHONPATH": "/media/chamaeleontis/Observatory_main/Code:/media/chamaeleontis/Observatory_main/Code/observations_transits",
             }
         }
     ]

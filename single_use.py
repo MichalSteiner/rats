@@ -6,34 +6,25 @@ Created on Thu Jun  3 15:11:31 2021
 """
 
 '''
-One-time use functions to setup tree directory to put data in
+One-time use functions to setup tree directory to put data in from a DACE downloaded data folder.
 
-Functions:
-    set_tree_directory ; set a tree directory for given planet
-    make_tree_directory_spectra_night ; creates a subdirectory for given spectra night observation
-    find_fiber ; finds a fiber from filename
-    find_type_of_spec ; finds a spectral type of spectra
-    setup_directory ; setups main directory and moves data to it
-    setup_routine ; automated routine for start of analysis
-    setup_directory_paths ; returns directory paths used in other functions
-
-Usage:
-    data_directory = 'path-to-data' # Change to path where your data is
-    main_directory = 'path-to-main-directory' # Change to path where your main directory is
-    setup_routine(data_directory,main_directory,instruments)
-    # This will do everything necessary for setup
-
+TODO:
+    Check that filesystem allows : in filename. If yes, no need to rename the files.
+    Add a check that this function was already run.
 
 
 '''
 #%% Importing libraries
 import os
 import shutil
-import termcolor as tc
-import re
 import tarfile
 import astropy.io.fits as fits
-from rats.utilities import logger
+from rats.utilities import default_logger_format
+import logging
+
+# Setup logging
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
 
 #%% Open tar.gz file
 def open_tarfile(directory: str,
@@ -66,7 +57,7 @@ def open_tarfile(directory: str,
     return None
 
 #%% Filter files inside the folder
-def set_tree_directory(original_directory: str,
+def _set_tree_directory(original_directory: str,
                        main_directory: str,
                        file_types: list = ['S1D', 'S2D', 'CCF']):
     """
@@ -94,9 +85,9 @@ def set_tree_directory(original_directory: str,
         for file in os.listdir(original_directory +
                                '/' +
                                night_folder):
-            create_folder_general(main_directory= main_directory)
+            _create_folder_general(main_directory= main_directory)
             
-            create_folder_spectra(main_directory= main_directory,
+            _create_folder_spectra(main_directory= main_directory,
                           night=  night_folder,
                           full_filepath= original_directory + '/' +
                                night_folder + '/' +
@@ -106,7 +97,7 @@ def set_tree_directory(original_directory: str,
     return
 
 #%% Create general folders
-def create_folder_general(main_directory: str):
+def _create_folder_general(main_directory: str):
     """
     Create a general tree directory.
 
@@ -147,7 +138,7 @@ def create_folder_general(main_directory: str):
 
 
 #%% Create folder for each spectrum
-def create_folder_spectra(main_directory: str,
+def _create_folder_spectra(main_directory: str,
                   night: str,
                   full_filepath: str,
                   filename: str,
@@ -189,7 +180,7 @@ def create_folder_spectra(main_directory: str,
                         mode = 0o777,
                         exist_ok = True)
             if subformat in ['S1D_SKYSUB']:
-                create_molecfit_folders(header= header,
+                _create_molecfit_folders(header= header,
                                         target= main_directory + '/' +
                                         'spectroscopy_data' + '/' +
                                         instrument + '/' + 
@@ -197,7 +188,7 @@ def create_folder_spectra(main_directory: str,
                                         fiber + '/' +
                                         fits_type + '/'
                                         )
-                copy_files(origin= full_filepath,
+                _copy_files(origin= full_filepath,
                            target= main_directory + '/' +
                            'spectroscopy_data' + '/' +
                            instrument + '/' + 
@@ -208,7 +199,7 @@ def create_folder_spectra(main_directory: str,
                            filename)
             
             
-            copy_files(origin= full_filepath,
+            _copy_files(origin= full_filepath,
                        target= main_directory + '/' +
                         'spectroscopy_data' + '/' +
                         instrument + '/' + 
@@ -219,7 +210,7 @@ def create_folder_spectra(main_directory: str,
                         filename)
     return
 #%% copy files
-def copy_files(origin:str,
+def _copy_files(origin:str,
                target:str):
     """
     Copy files from origin to target.
@@ -235,12 +226,12 @@ def copy_files(origin:str,
     logger.info('Moving file:\n'+ origin)
     logger.info('to:\n' +target)
     logger.info('='*50)
-    # shutil.copy(origin,
-    #             target)
+    shutil.copy(origin,
+                target)
     
     return
 
-def create_molecfit_folders(header: fits.header.Header,
+def _create_molecfit_folders(header: fits.header.Header,
                             target: str):
     """
     Create a molecfit folder extracted from the FOLDERS_molecfit based on instrument.
@@ -281,18 +272,7 @@ def setup_routine(original_directory: str,
     file_types : list, optional
         Which type of file types to check for, by default ['S1D', 'S2D', 'CCF']
     """
-    set_tree_directory(original_directory,
+    _set_tree_directory(original_directory,
                        main_directory,
                        file_types = file_types)
     return
-
-if __name__ == '__main__':
-    logger.info(os.getcwd())
-    logger.critical('Please enter the original directory with data.')
-    original_directory = input()
-    logger.info(original_directory)
-    setup_routine(original_directory= str(original_directory),
-                  main_directory= os.getcwd(),
-                  file_types = ['S1D', 'S2D', 'CCF'])
-    
-    

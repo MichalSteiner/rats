@@ -18,7 +18,7 @@ Figure = plt.figure
 
 #%% ProminentLines
 @dataclass
-class ProminentLines:
+class _ProminentLines:
     '''
         Class that holds setting for given set of prominent lines
     '''
@@ -74,25 +74,25 @@ class ProminentLines:
 
 
 #%% Prominent lines list
-Sodium_doublet = ProminentLines(
+Sodium_doublet = _ProminentLines(
     'Sodium',
     [5889.950,5895.924],
     sp.SpectralRegion(5886*u.AA, 5900*u.AA)
     )
 
-Balmer_series = ProminentLines(
+Balmer_series = _ProminentLines(
     'Balmer series',
     [6562.79],
     sp.SpectralRegion(6559*u.AA, 6566*u.AA)
     )
 
-Potassium_doublet = ProminentLines(
+Potassium_doublet = _ProminentLines(
     'Potassium',
     [7664.8991, 7698.9645],
     sp.SpectralRegion(7661*u.AA, 7668*u.AA) + sp.SpectralRegion(7695*u.AA,7702*u.AA)
     )
 
-Calcium_lines = ProminentLines(
+Calcium_lines = _ProminentLines(
     'Calcium',
     [3933.66, 3968.47],
     sp.SpectralRegion(3930*u.AA, 3937*u.AA) + sp.SpectralRegion(3965*u.AA,3972*u.AA)

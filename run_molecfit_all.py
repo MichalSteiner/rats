@@ -17,6 +17,12 @@ from matplotlib.widgets import Button
 import matplotlib.pyplot as plt
 import os
 import matplotlib.gridspec as gs
+from rats.utilities import default_logger_format
+import logging
+#%% Setting up logging
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
+
 
 #%% Usage
 '''
@@ -49,127 +55,100 @@ To use this code:
 
 Main issues:
     Molecfit as of right now doesn't provide separate telluric profiles for each molecules (it is implemented in esoreflex, but couldn't find easy version of it in esorex). This means that if wavelength regions don't include lines from fitted molecule, it won't be corrected. For ESPRESSO, the default wavelength range is including both H2O and O2 bands. For other instruments, check Smette et al. 2015, Fig. 1 for telluric lines in spectral region.
-        
+    
+    
+By default, the single_use setup will provide the molecfit folders with correct instrument setup for HARPS, ESPRESSO and NIRPS. The wavelength bands provided are mostly correct, but need checking for possibly stellar contamination inside.
+
+TODO:
+    Test that the code works using the run_molecfit_all function
 '''
 #%%
-# path = '/media/chamaeleontis/FAT/wasp-189b/HARPS/WASP-189/2023-06-04/'
-
-# def rename_aliens_mac(path:str):
-#     """
-#     Removes aliens from the filename going from Mac filesystem to FAT filesystem.
-
-#     Parameters
-#     ----------
-#     path : str
-#         Path to the directory.
-
-#     Returns
-#     -------
-#     None.
-
-#     """
-#     for item in os.listdir(path):
-#         os.rename(path + item,
-#                   path + item.replace('\uf022', '_'))
-#     return
-
-# rename_aliens_mac(path)
-
-#%% Settings
-# =============================================================================
-# TODO:
-# Settings to change by default for each run:
-    # For ESPRESSO data, its necessary to define the UT in rcparams file
-# =============================================================================
-# Main directory
-# directory_root = '/media/chamaeleontis/Observatory_main/WASP-76/data/spectra/ESPRESSO/2018-09-02/Fiber_A/S1D/molecfit'
-# =============================================================================
-# HEARTS
-# =============================================================================
-
-# =============================================================================
-# KELT-11b
-# =============================================================================
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-01/Fiber_A/S1D/molecfit'
-
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-14/Fiber_A/S1D/molecfit'
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-15/Fiber_A/S1D/molecfit'
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-16/Fiber_A/S1D/molecfit'
-
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-05/Fiber_A/S1D/molecfit'
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-06/Fiber_A/S1D/molecfit'
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-07/Fiber_A/S1D/molecfit'
-
-
-# =============================================================================
-# WASP-121b
-# =============================================================================
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2017-12-31/Fiber_A/S1D/molecfit'
-directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2018-01-09/Fiber_A/S1D/molecfit'
-# directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2018-01-14/Fiber_A/S1D/molecfit'
-
-# =============================================================================
-# WASP-166b
-# =============================================================================
-# directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-01-13/Fiber_A/S1D/molecfit'
-# directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-03-03/Fiber_A/S1D/molecfit'
-# directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-03-14/Fiber_A/S1D/molecfit'
-
-
-# =============================================================================
-# Valentina SKYSUB data
-# =============================================================================
-# directory_root = '/media/chamaeleontis/Observatory_main/Valentina_molecfit/WASP-189b/2023-04-24/molecfit_HARPS_SKYSUB/molecfit'
-# directory_root = '/media/chamaeleontis/Observatory_main/Valentina_molecfit/WASP-189b/2023-06-04/molecfit_HARPS_SKYSUB/molecfit'
-
-
-
-# Flags for molecfit
-force_sgl = False
-force_all = False
-# WLG_TO_MICRON parameterL
-wlg2mic = 0.0001 # Conversion factor from our units to microns
-# WAVELENGTH_FRAME parameter(not implemented)
-restframe = 'AIR' # Which wavelength frame are we in, air or vacuum
-# =============================================================================
-# Settings - one time setup:
-# =============================================================================
 # Location of esorex command, alias won't work!
 command_esorex = "/home/chamaeleontis/esoreflex/esoreflex/bin/esorex"
-# =============================================================================
-# Automatically setup settings, no need to change:
-# =============================================================================
-# Additional directories
-directory_molecfit_input = directory_root +'/molecfit_input'
-directory_molecfit_output = directory_root +'/molecfit_output'
-directory_molecfit_reduced = directory_root +'/molecfit_reduced'
-directory_molecfit_tmp_files = directory_root  +'/tmp_files'
-directory_molecfit_para_files = directory_root  +'/para_files'
-directory_molecfit_input_s2d = directory_root +'/molecfit_input_S2D'
-# regions fits files
-wave_include = directory_molecfit_tmp_files + '/WAVE_INCLUDE.fits'
-wave_exclude = directory_molecfit_tmp_files + '/WAVE_EXCLUDE.fits'
-pixel_exclude = directory_molecfit_tmp_files + '/PIXEL_EXCLUDE.fits'
-# rc params files location
-rc_para_model = directory_molecfit_para_files + '/molecfit_model.rc'
-rc_para_calctrans = directory_molecfit_para_files + '/molecfit_calctrans.rc'
-rc_para_correct = directory_molecfit_para_files + '/molecfit_correct.rc'
-# SOF files location
-sof_para_model = directory_molecfit_para_files + '/molecfit_model.sof'
-sof_para_calctrans = directory_molecfit_para_files + '/molecfit_calctrans.sof'
-sof_para_correct = directory_molecfit_para_files + '/molecfit_correct.sof'
-# Wave region fits files
-wave_include_fits = directory_molecfit_tmp_files + '/WAVE_INCLUDE.fits'
-wave_exclude_fits = directory_molecfit_tmp_files + '/WAVE_EXCLUDE.fits'
-pixel_exclude_fits = directory_molecfit_tmp_files + '/PIXEL_EXCLUDE.fits'
-# molecfit commands 
-command_molecfit_model = [command_esorex,'--recipe-config=%s'%rc_para_model,'molecfit_model',sof_para_model]
-command_molecfit_calctrans = [command_esorex,'--recipe-config=%s'%rc_para_calctrans,'molecfit_calctrans',sof_para_calctrans]
-command_molecfit_correct = [command_esorex,'--recipe-config=%s'%rc_para_correct,'molecfit_correct',sof_para_correct]
-# Switch to directory of temporary files to run molecfit_model there
-os.chdir(directory_molecfit_tmp_files)
+force_sgl = False
+force_all = False
+wlg2mic = 0.0001 # Conversion factor from our units to microns
+restframe = 'AIR' # Which wavelength frame are we in, air or vacuum
+#%% Settings
+if __name__ == '__main__':
+    # =============================================================================
+    # TODO:
+    # Settings to change by default for each run:
+        # For ESPRESSO data, its necessary to define the UT in rcparams file
+    # =============================================================================
+    # Main directory
+    # directory_root = '/media/chamaeleontis/Observatory_main/WASP-76/data/spectra/ESPRESSO/2018-09-02/Fiber_A/S1D/molecfit'
+    # =============================================================================
+    # HEARTS
+    # =============================================================================
+
+    # =============================================================================
+    # KELT-11b
+    # =============================================================================
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-01/Fiber_A/S1D/molecfit'
+
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-14/Fiber_A/S1D/molecfit'
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-15/Fiber_A/S1D/molecfit'
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-16/Fiber_A/S1D/molecfit'
+
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-05/Fiber_A/S1D/molecfit'
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-06/Fiber_A/S1D/molecfit'
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-07/Fiber_A/S1D/molecfit'
+
+
+    # =============================================================================
+    # WASP-121b
+    # =============================================================================
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2017-12-31/Fiber_A/S1D/molecfit'
+    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2018-01-09/Fiber_A/S1D/molecfit'
+    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2018-01-14/Fiber_A/S1D/molecfit'
+
+    # =============================================================================
+    # WASP-166b
+    # =============================================================================
+    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-01-13/Fiber_A/S1D/molecfit'
+    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-03-03/Fiber_A/S1D/molecfit'
+    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-03-14/Fiber_A/S1D/molecfit'
+
+
+    # =============================================================================
+    # Valentina SKYSUB data
+    # =============================================================================
+    # directory_root = '/media/chamaeleontis/Observatory_main/Valentina_molecfit/WASP-189b/2023-04-24/molecfit_HARPS_SKYSUB/molecfit'
+    # directory_root = '/media/chamaeleontis/Observatory_main/Valentina_molecfit/WASP-189b/2023-06-04/molecfit_HARPS_SKYSUB/molecfit'
+    # WLG_TO_MICRON parameterL
+    # =============================================================================
+    # Additional directories
+    directory_molecfit_input = directory_root +'/molecfit_input'
+    directory_molecfit_output = directory_root +'/molecfit_output'
+    directory_molecfit_reduced = directory_root +'/molecfit_reduced'
+    directory_molecfit_tmp_files = directory_root  +'/tmp_files'
+    directory_molecfit_para_files = directory_root  +'/para_files'
+    directory_molecfit_input_s2d = directory_root +'/molecfit_input_S2D'
+    # regions fits files
+    wave_include = directory_molecfit_tmp_files + '/WAVE_INCLUDE.fits'
+    wave_exclude = directory_molecfit_tmp_files + '/WAVE_EXCLUDE.fits'
+    pixel_exclude = directory_molecfit_tmp_files + '/PIXEL_EXCLUDE.fits'
+    # rc params files location
+    rc_para_model = directory_molecfit_para_files + '/molecfit_model.rc'
+    rc_para_calctrans = directory_molecfit_para_files + '/molecfit_calctrans.rc'
+    rc_para_correct = directory_molecfit_para_files + '/molecfit_correct.rc'
+    # SOF files location
+    sof_para_model = directory_molecfit_para_files + '/molecfit_model.sof'
+    sof_para_calctrans = directory_molecfit_para_files + '/molecfit_calctrans.sof'
+    sof_para_correct = directory_molecfit_para_files + '/molecfit_correct.sof'
+    # Wave region fits files
+    wave_include_fits = directory_molecfit_tmp_files + '/WAVE_INCLUDE.fits'
+    wave_exclude_fits = directory_molecfit_tmp_files + '/WAVE_EXCLUDE.fits'
+    pixel_exclude_fits = directory_molecfit_tmp_files + '/PIXEL_EXCLUDE.fits'
+    # molecfit commands 
+    command_molecfit_model = [command_esorex,'--recipe-config=%s'%rc_para_model,'molecfit_model',sof_para_model]
+    command_molecfit_calctrans = [command_esorex,'--recipe-config=%s'%rc_para_calctrans,'molecfit_calctrans',sof_para_calctrans]
+    command_molecfit_correct = [command_esorex,'--recipe-config=%s'%rc_para_correct,'molecfit_correct',sof_para_correct]
+    # Switch to directory of temporary files to run molecfit_model there
+    os.chdir(directory_molecfit_tmp_files)
 #%% Plot settings
-plt.rcParams["figure.figsize"] = 18.52, 11.24
+    plt.rcParams["figure.figsize"] = 18.52, 11.24
 
 #%% Running commands
 def run_molecfit_model(): # Run molecfit_model
@@ -826,11 +805,20 @@ def update_header(item):
     
     return
 #%% Run_molecfit_all
-def run_molecfit_all(force_s2d=False):
+def run_molecfit_night(directory_root: str,
+                       force_s2d=False):
     '''
     Run the entire molecfit pipeline for the given spectrum
     '''
     global force_sgl,force_all
+    if os.listdir(directory_molecfit_input) == 0:
+        logger.warning('The input directory is empty:')
+        logger.warning('Looking into directory:')
+        logger.warning(directory_molecfit_input)
+        logger.info('This can happen if molecfit has already been rerun completely.')
+        logger.info('In that case no action is needed and this warning can be ignored')
+        return
+    
     for file in os.listdir(directory_molecfit_input):
         if file.endswith('.fits'):
             create_region_fits_files(file)
@@ -866,29 +854,65 @@ def run_molecfit_all(force_s2d=False):
             force_sgl = False
     return
 #%%
-# #%% run_molecfit_all_fast
-# def run_molecfit_all_fast():
-#     '''
-#     Run the molecfit using single telluric profile to all spectra
+def setup_directories(directory_root: str):
+    """
+    Setup global variables to be used for given dataset.
     
-#     Requires definition of refernece spectrum. Useful for telluric correction of S2D files
+    All the filepaths, commands and folder paths are output as a global variable, so they can be used within this file without passing through function calls.
+
+    Parameters
+    ----------
+    directory_root : str
+        Directory of the root molecfit dataset.
+    """
+    global directory_molecfit_input, directory_molecfit_output, directory_molecfit_reduced, directory_molecfit_tmp_files, directory_molecfit_para_files
+    global directory_molecfit_input_s2d
+    global wave_include, wave_exclude, pixel_exclude
+    global rc_para_model, rc_para_calctrans, rc_para_correct
+    global sof_para_model, sof_para_calctrans, sof_para_correct
+    global wave_include_fits, wave_exclude_fits, pixel_exclude_fits
+    global command_molecfit_model, command_molecfit_calctrans, command_molecfit_correct
     
-    
-#     '''
-#     global force_sgl,force_all
-    
-#     create_region_fits_files(reference_spectrum) # Create new region fits file if not existing
-#     create_sof_files(reference_spectrum,all_spec=True) # Create SOF files for current spectrum
-#     while not(force_sgl) and not(force_all):
-#         os.chdir(directory_molecfit_tmp_files)
-#         check_empty_region() # Check that region fits files are commented if empty
-#         run_molecfit_model() # molecfit_model
-#         run_molecfit_calctrans() # molecfit_calctrans
-#         show_gui()
-#         check_empty_region()
-#     os.chdir(directory_molecfit_output)
-#     run_molecfit_correct() # molecfit_correct
-#     # update_header(item) # Update header of resulting fits file
-#     return
+    # Additional directories
+    directory_molecfit_input = directory_root +'/molecfit_input'
+    directory_molecfit_output = directory_root +'/molecfit_output'
+    directory_molecfit_reduced = directory_root +'/molecfit_reduced'
+    directory_molecfit_tmp_files = directory_root  +'/tmp_files'
+    directory_molecfit_para_files = directory_root  +'/para_files'
+    directory_molecfit_input_s2d = directory_root +'/molecfit_input_S2D'
+    # regions fits files
+    wave_include = directory_molecfit_tmp_files + '/WAVE_INCLUDE.fits'
+    wave_exclude = directory_molecfit_tmp_files + '/WAVE_EXCLUDE.fits'
+    pixel_exclude = directory_molecfit_tmp_files + '/PIXEL_EXCLUDE.fits'
+    # rc params files location
+    rc_para_model = directory_molecfit_para_files + '/molecfit_model.rc'
+    rc_para_calctrans = directory_molecfit_para_files + '/molecfit_calctrans.rc'
+    rc_para_correct = directory_molecfit_para_files + '/molecfit_correct.rc'
+    # SOF files location
+    sof_para_model = directory_molecfit_para_files + '/molecfit_model.sof'
+    sof_para_calctrans = directory_molecfit_para_files + '/molecfit_calctrans.sof'
+    sof_para_correct = directory_molecfit_para_files + '/molecfit_correct.sof'
+    # Wave region fits files
+    wave_include_fits = directory_molecfit_tmp_files + '/WAVE_INCLUDE.fits'
+    wave_exclude_fits = directory_molecfit_tmp_files + '/WAVE_EXCLUDE.fits'
+    pixel_exclude_fits = directory_molecfit_tmp_files + '/PIXEL_EXCLUDE.fits'
+    # molecfit commands 
+    command_molecfit_model = [command_esorex,'--recipe-config=%s'%rc_para_model,'molecfit_model',sof_para_model]
+    command_molecfit_calctrans = [command_esorex,'--recipe-config=%s'%rc_para_calctrans,'molecfit_calctrans',sof_para_calctrans]
+    command_molecfit_correct = [command_esorex,'--recipe-config=%s'%rc_para_correct,'molecfit_correct',sof_para_correct]
+    return
 #%%
-run_molecfit_all()
+def run_molecfit_all(main_directory: str):
+    for subdir, _, _ in os.walk(main_directory + '/data/spectra'):  
+        if subdir.endswith('molecfit'):
+            logger.info('Running molecfit on folder:')
+            logger.info(subdir)
+            run_molecfit_night(
+                directory_root= subdir,
+                force_s2d= False
+            )
+    return
+
+#%%
+if __name__ == '__main__':
+    run_molecfit_night()

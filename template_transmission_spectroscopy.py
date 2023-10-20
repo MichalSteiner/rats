@@ -12,7 +12,7 @@ Template for transmission spectroscopy pipeline using the RATS (Rapid Analysis o
 # plots
 # =============================================================================
 #%% Importing libraries
-# chaos library - custom TS pipeline
+# Rats library - custom TS pipeline
 import rats
 import rats.eso as eso # Loading ESO instruments
 import rats.parameters as para # System parameters
@@ -21,8 +21,9 @@ import rats.plot_spectra as ps # Spectra plotting
 import rats.spectra_manipulation as sm # Spectra manipulation
 import rats.table as tab # Table creation
 import rats.plot_functions as pf # Plot functions
-import rats.molecfit as mol # Molecfit functions
+# import rats.molecfit as mol # Molecfit loading functions
 import rats.spectra_ccf as ccf # CCF functions
+import rats.run_molecfit_all as mol # Functions to run molecfit
 # Matplotlib and seaborn
 import matplotlib as mpl
 import matplotlib.animation as animation
@@ -40,24 +41,27 @@ import os
 #%% Select type of plots (normal vs dark mode)
 # import rats.matplotlib_style_sheets.dark_mode_presentation
 #%% Flags to force loads and skips of functions
-force_load = False
-force_skip = False
+force_load = False # True = Loads output of functions instead of Calculation
+force_skip = False # True = Skips running the function instead of loading/calculation
 #%% Setup of directories and movement of files from downloaded folder
 # TODO: Change the filepaths
 data_directory = 'Add directory of the data (as extracted from DACE)'
 main_directory = 'Add main directory of the project'
 
 figure_directory = main_directory + '/figures'
-directory_spectra = main_directory + '/data/spectra/ESPRESSO'
+
 # For multiple instruments, need to define multiple directories
 #%% Movement of data to predefined directory tree
 # TODO: Run once, then comment/remove this cell
-instruments = ['ESPRESSO']
-su.setup_routine(data_directory, main_directory,instruments=instruments)
-path_main, path_spectra, path_photometry, path_figures, path_figures_spectra, path_figures_photometry, path_tables = su.setup_directory_paths(main_directory,relative_path=True)
+su.setup_routine(original_directory= data_directory,
+                 main_directory= main_directory,
+                 file_types= ['S1D', 'S2D', 'CCF'],
+                 )
 #%% Change the working directory
-os.chdir(main_directory)
 
+#%% Run molecfit all
+mol.run_molecfit_all(main_directory)
+os.chdir(main_directory)
 #%% Loading parameters
 # TODO: Change the name of the system
 sys_para = para.system_parameters_class('Name of the system')

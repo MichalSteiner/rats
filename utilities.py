@@ -373,3 +373,23 @@ def save_progress(func,*args,file=None,force_calculate=False,no_save = False):
                 print('Saved progress in %s'%file)
                 pickle.dump(result, output_file)
     return result
+
+#%%
+def rename_aliens_mac(path:str):
+    """
+    Removes aliens from the filename going from Mac filesystem to FAT filesystem.
+
+    Parameters
+    ----------
+    path : str
+        Path to the directory.
+
+    Returns
+    -------
+    None.
+
+    """
+    for item in os.listdir(path):
+        os.rename(path + item,
+                  path + item.replace('\uf022', '_'))
+    return

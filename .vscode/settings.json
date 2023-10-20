@@ -2,7 +2,7 @@
     "python.autoComplete.extraPaths": [
     ],
     "python.analysis.extraPaths": [
-        "/media/chamaeleontis/Observatory_main/Code/RATS",
+        "/media/chamaeleontis/Observatory_main/Code/",
         "/media/chamaeleontis/Observatory_main/Code/observations_transits",
     ]
 }
