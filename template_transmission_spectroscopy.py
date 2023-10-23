@@ -15,7 +15,7 @@ Template for transmission spectroscopy pipeline using the RATS (Rapid Analysis o
 # Rats library - custom TS pipeline
 import rats
 import rats.eso as eso # Loading ESO instruments
-import rats.parameters as para # System parameters
+import parameters_old as para # System parameters
 import rats.single_use as su # Single use functions
 import rats.plot_spectra as ps # Spectra plotting
 import rats.spectra_manipulation as sm # Spectra manipulation
@@ -45,8 +45,8 @@ force_load = False # True = Loads output of functions instead of Calculation
 force_skip = False # True = Skips running the function instead of loading/calculation
 #%% Setup of directories and movement of files from downloaded folder
 # TODO: Change the filepaths
-data_directory = 'Add directory of the data (as extracted from DACE)'
-main_directory = 'Add main directory of the project'
+data_directory = 'Add_directory_of_the_data_as_extracted_from_DACE'
+main_directory = 'Add_main_directory_of_the_project'
 
 figure_directory = main_directory + '/figures'
 
@@ -55,7 +55,10 @@ figure_directory = main_directory + '/figures'
 # TODO: Run once, then comment/remove this cell
 su.setup_routine(original_directory= data_directory,
                  main_directory= main_directory,
-                 file_types= ['S1D', 'S2D', 'CCF'],
+                 file_types= ['S1D',
+                              'S2D',
+                              'CCF'
+                              ],
                  )
 #%% Change the working directory
 
@@ -64,8 +67,10 @@ mol.run_molecfit_all(main_directory)
 os.chdir(main_directory)
 #%% Loading parameters
 # TODO: Change the name of the system
-sys_para = para.system_parameters_class('Name of the system')
-sys_para.load_nasa_parameters('Name of the planet as defined by NASA archive',force_load=True)
+sys_para = para.system_parameters_class('Name_of_the_system')
+sys_para.load_nasa_parameters('Name_of_the_planet_as_defined_by_NASA_archive',
+                              force_load=True
+                              )
 #%% Check the original references!
 # TODO: Check that the system values are correct and correct those that are not manually
 #     Keep in mind, the code will run as long as you define the name of the planet above, 
@@ -141,8 +146,8 @@ exo_class.calculate_scale_height()
 # TODO: Change the systems highlighted
 fig, ax = pf.radius_insolation_plot(
     exo_class,
-    [['Enter name(-s) of the planet(-s) to highlight']],
-    [['Enter label(-s) of the planet(-s) to highlight']],
+    [['Enter_names_of_the_planets_to_highlight']],
+    [['Enter_labels_of_the_planets_to_highlight']],
     )
 
 #%% Loading data
@@ -183,7 +188,7 @@ data_deblaze_s1d_B = eso.load_all(directory_spectra,
 # =============================================================================
 # TODO: Replace the S1D name with S2D if using it instead
 # =============================================================================
-eso.update_phase_and_vel(data_deblaze_s1d_A,sys_para)
+of.update_phase_and_vel(data_deblaze_s1d_A,sys_para)
 para.update_transit(data_deblaze_s1d_A,sys_para)
 #%% Calculate master A and B spectrum
 # =============================================================================

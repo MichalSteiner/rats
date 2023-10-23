@@ -60,13 +60,18 @@ def load_spectrum(filename: str) -> sp.Spectrum1D:
     fits_file = fits.open(filename)
     header = fits_file[0].header
     _check_DRS_version(header['HIERARCH ESO PRO REC1 PIPE ID'])
+    logger.debug('Opening file:')
+    logger.debug('    ' + filename) 
     
     type_spec = header['HIERARCH ESO PRO CATG']
     if 'S1D' in type_spec:
+        logger.debug('Detected S1D spectrum, trying to open.')
         spectrum = load_S1D_spectrum(fits_hdulist= fits_file)
     elif 'S2D' in type_spec:
+        logger.debug('Detected S2D spectrum, trying to open.')
         spectrum = load_S2D_spectrum(fits_hdulist= fits_file)
     elif 'CCF' in type_spec:
+        logger.debug('Detected CCF spectrum, trying to open.')
         spectrum = load_CCF_spectrum(fits_hdulist= fits_file)
     else:
         raise KeyError("Not a viable format of spectra.")
@@ -111,6 +116,7 @@ def load_S1D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
         'header': main_header,
         'BERV_corrected': True,
         'RF_Barycenter': True,
+        'RF': 'Barycenter',
         'vacuum': False,
         'air': True
         })
@@ -145,12 +151,15 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     wavelength_air = fits_hdulist['WAVEDATA_AIR_BARY'].data # Wavedata - air (ground instruments)
     nb_orders = fits_hdulist['SCIDATA'].header['NAXIS2'] # Number of orders 
     
-    flux = _correct_dispersion_S2D(wavelength_air,flux)
+    flux = _correct_dispersion_S2D(wavelength_air,
+                                   flux,
+                                   flux_err)
     meta = _basic_meta_parameters()
     meta.update({
         'header': main_header,
         'BERV_corrected': True,
         'RF_Barycenter': True,
+        'RF': 'Barycenter',
         'vacuum': False,
         'air': True
         })
@@ -161,7 +170,6 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
         meta = meta,
         mask = _mask_flux_array(flux)
         )
-    
     return spectrum
 
 #%% Load CCF spectrum
@@ -367,6 +375,11 @@ def _numbering_nights(spectrum_list:sp.SpectrumList):
     spectrum_list : sp.SpectrumList
         Spectrum list loaded from all instruments and nights as given by load_all() function.
     """
+    if len(spectrum_list) == 0:
+        logger.warning('No spectra loaded, cannot index:')
+        logger.warning('    Returning')
+        return
+    
     number_night = 1
     number_spec = 1
     last_night =  spectrum_list[0].meta['Night']
@@ -388,9 +401,12 @@ def _numbering_nights(spectrum_list:sp.SpectrumList):
 
 #%% correct_dispersion_S2D
 def _correct_dispersion_S2D(spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
-                           flux: astropy.units.quantity.Quantity) -> astropy.units.quantity.Quantity:
+                           flux: astropy.units.quantity.Quantity,
+                           uncertainty: astropy.nddata.StdDevUncertainty) -> astropy.units.quantity.Quantity:
     """
     Corrects for the dispersion effect on the S2D spectra.
+    
+    TODO: Add uncertainty propagation.
 
     Parameters
     ----------
@@ -398,6 +414,8 @@ def _correct_dispersion_S2D(spectral_axis: sp.spectra.spectral_axis.SpectralAxis
         Spectral axis (2-dimensional) of the spectrum
     flux : astropy.units.quantity.Quantity
         Flux (2-dimensional) of the spectrum
+    uncertainty : 
+        Uncertainty (2-dimensional) of the spectrum flux
 
     Returns
     -------
@@ -499,6 +517,7 @@ def _basic_meta_parameters() -> dict:
         'RF_Barycenter': False,
         'RF_Star': False,
         'RF_Planet': False,
+        'RF': 'undefined',
         'systemic_velocity_corrected': False,
         'v_sys_corrected':False,
         'v_star_corrected':False,

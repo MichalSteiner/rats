@@ -11,10 +11,8 @@ import astropy
 import numpy as np
 import astropy.units as u
 import astropy.io.fits as fits
-# import rats.eso as eso
 from copy import deepcopy
 import astropy.constants as con
-import termcolor as tc
 import pickle
 import math
 import specutils.fitting as fitting

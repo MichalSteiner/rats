@@ -4,5 +4,8 @@
     "python.analysis.extraPaths": [
         "/media/chamaeleontis/Observatory_main/Code/",
         "/media/chamaeleontis/Observatory_main/Code/observations_transits",
-    ]
+    ],
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "/media/chamaeleontis/Observatory_main/Code/"
+    }
 }
