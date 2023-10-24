@@ -46,9 +46,14 @@ def open_tarfile(directory: str,
     None
     """
     assert filename.endswith('tar.gz'), "Not a suitable tar.gz file"
-    
-    file = tarfile.open(filename)
+
+    file = tarfile.open(directory + '/' + filename)
     # Rename files to valid name
+    logger.info('Opening tar gz file:')
+    logger.info('   ' + directory + '/' + filename)
+    logger.warning('This operation can take long time (~10minutes) if the tar.gz file is large.')
+    logger.warning('    Length of the file is:' + str(len(file.getmembers())))
+        
     for ind,member in enumerate(file.getmembers()):
         member.name = member.name.replace(':','_')
     file.extractall(directory)
@@ -75,7 +80,8 @@ def _set_tree_directory(original_directory: str,
     if len(os.listdir(original_directory)) == 1 and os.listdir(original_directory)[0].endswith('tar.gz'):
         filename = os.listdir(original_directory)[0]
         logger.info('Found only tar.gz file. Opening it.')
-        open_tarfile(original_directory + '/' + filename)
+        open_tarfile(directory= original_directory,
+                     filename= filename)
     
     for night_folder in os.listdir(original_directory):
         if night_folder.endswith('.tar.gz'):
@@ -211,7 +217,7 @@ def _create_folder_spectra(main_directory: str,
     return
 #%% copy files
 def _copy_files(origin:str,
-               target:str):
+                target:str):
     """
     Copy files from origin to target.
 
@@ -223,20 +229,19 @@ def _copy_files(origin:str,
         Target path for the file
     """
     
-    logger.info('Moving file:\n'+ origin)
-    logger.info('to:\n' +target)
-    logger.info('='*50)
+    logger.debug('Moving file:\n'+ origin)
+    logger.debug('to:\n' +target)
+    logger.debug('='*50)
     shutil.copy(origin,
                 target)
     
     return
 
 def _create_molecfit_folders(header: fits.header.Header,
-                            target: str):
+                             target: str):
     """
     Create a molecfit folder extracted from the FOLDERS_molecfit based on instrument.
 
-    Parameters
     ----------
     header : fits.header.Header
         Header of the fits file.
@@ -250,7 +255,7 @@ def _create_molecfit_folders(header: fits.header.Header,
     UT = ''
     if instrument == 'ESPRESSO':
         telescope = header['TELESCOP']
-        UT = '_' + ''.join(filter(str.isdigit, telescope))
+        UT = '_UT' + ''.join(filter(str.isdigit, telescope))
     
     source = os.path.dirname(__file__) + '/FOLDERS_molecfit/' + instrument + UT
     shutil.copytree(source, target, dirs_exist_ok = True)
@@ -259,7 +264,8 @@ def _create_molecfit_folders(header: fits.header.Header,
 #%% setup_routine
 def setup_routine(original_directory: str,
                   main_directory: str,
-                  file_types: list = ['S1D', 'S2D', 'CCF']):
+                  file_types: list = ['S1D', 'S2D', 'CCF'],
+                  rerun:bool = False):
     """
     Full setup for a new dataset
 
@@ -272,7 +278,25 @@ def setup_routine(original_directory: str,
     file_types : list, optional
         Which type of file types to check for, by default ['S1D', 'S2D', 'CCF']
     """
+    if os.path.exists(main_directory+'/spectroscopy_data'):
+        if not(rerun) and len(os.listdir(main_directory+'/spectroscopy_data')) != 0:
+            return
+    
     _set_tree_directory(original_directory,
-                       main_directory,
-                       file_types = file_types)
+                        main_directory,
+                        file_types = file_types)
     return
+
+
+if __name__ == '__main__':
+    logger.info('Testing setup for rats.single_use module')
+    
+    original_directory = '/media/chamaeleontis/Observatory_main/Data_all_raw/TOI-132'
+    main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test'
+    
+    setup_routine(original_directory= original_directory,
+                  main_directory= main_directory,
+                  file_types= ['S1D','S2D','CCF'])
+    
+    logger.info('Test succesful. Full setup done in directory:')
+    logger.info('    ' + main_directory)

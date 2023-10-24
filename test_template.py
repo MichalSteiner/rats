@@ -44,34 +44,29 @@ import os
 force_load = False # True = Loads output of functions instead of Calculation
 force_skip = False # True = Skips running the function instead of loading/calculation
 #%% Setup of directories and movement of files from downloaded folder
-# TODO: Change the filepaths
-data_directory = 'Add_directory_of_the_data_as_extracted_from_DACE'
-main_directory = 'Add_main_directory_of_the_project'
-
-figure_directory = main_directory + '/figures'
+data_directory = '/media/chamaeleontis/Observatory_main/Data_all_raw/TOI-132'
+main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test'
 
 # For multiple instruments, need to define multiple directories
 #%% Movement of data to predefined directory tree
-# TODO: Run once, then comment/remove this cell
 su.setup_routine(original_directory= data_directory,
                  main_directory= main_directory,
                  file_types= ['S1D',
                               'S2D',
                               'CCF'
-                              ],
+                              ],    
                  rerun= False
                  )
-#%% Change the working directory
 
-#%% Run molecfit all
+#%% Run molecfit
 mol.run_molecfit_all(main_directory)
+#%% Change to main working directory
 os.chdir(main_directory)
 #%% Loading parameters
 # TODO: Change the name of the system
-sys_para = para.system_parameters_class('Name_of_the_system')
-sys_para.load_nasa_parameters('Name_of_the_planet_as_defined_by_NASA_archive',
-                              force_load=True
-                              )
+SystemParameters = SystemParametersComposite()
+SystemParameters.load_NASA_CompositeTable_values(planet_name = 'TOI-132 b')
+
 #%% Check the original references!
 # TODO: Check that the system values are correct and correct those that are not manually
 #     Keep in mind, the code will run as long as you define the name of the planet above, 

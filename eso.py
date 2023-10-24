@@ -235,7 +235,7 @@ def load_all(main_directory: str,
         raise ValueError('Invalid combination of fiber and spectra format. There are no SKYSUB_B files.')
     
     spectra_list = sp.SpectrumList()
-    for instrument in os.listdir(main_directory + '/data/spectra/'):
+    for instrument in os.listdir(main_directory + '/spectroscopy_data/'):
         if (instrument_list is not None) and (instrument not in instrument_list):
             logger.info('Ignoring false instrument in folder: ' + instrument)
             continue
@@ -244,7 +244,7 @@ def load_all(main_directory: str,
             continue
         else:
             logger.info('Loading instrument: ' + instrument)
-            instrument_directory = main_directory + '/data/spectra/' + instrument
+            instrument_directory = main_directory + '/spectroscopy_data/' + instrument
             spectra_list.extend(
                 load_instrument(
                     instrument_directory= instrument_directory,
@@ -296,7 +296,6 @@ def load_instrument(instrument_directory: str,
                     fiber= fiber
                     )
                 )
-        
     return spectra_list
 #%% Load night of a given instrument
 @progress_tracker
@@ -327,6 +326,16 @@ def load_night(night_directory: str,
                          _SpectraFormat[spectra_format].value[0] + '/' +  
                          _SpectraFormat[spectra_format].value[1]
                          )
+    
+    if not(os.path.exists(spectra_directory)):
+        logger.critical('The directory does not exist')
+        logger.critical('    ' + spectra_directory)
+        return spectra_list
+    elif len(os.listdir(spectra_directory)) == 0:
+        logger.critical('The directory %s is empty'%(spectra_directory))
+        logger.critical('    ' + spectra_directory)
+        return spectra_list
+    
     for filename in os.listdir(spectra_directory):
         if not(filename.endswith('.fits')):
             logger.info('Ignoring file with no fits extension: '+ filename)
@@ -637,8 +646,9 @@ def _mask_flux_array(flux: u.Quantity) -> np.ndarray:
 
 #%% Testing function
 if __name__ == '__main__':
+    logger.info('Testing setup for rats.eso module.')
+    main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test_WASP90'
     
-    main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/TOI-132'
     for spectra_member in _SpectraFormat:
         if 'CCF' in spectra_member.name:
             logger.critical('CCF format are not implemented yet. After implementing remove this line and test.')
@@ -660,5 +670,6 @@ if __name__ == '__main__':
                 force_skip= False,
                 pkl_name= spectra_member.name + fiber_member.name + '.pkl'
             )
+            logger.info('Loaded '+ str(len(spectra_list)) + ' number of spectra')
             logger.info('    Succesfully loaded format:' + spectra_member.name + ' and fiber: ' + fiber_member.name)
-    
+    logger.info('Test succesful. Check logs for issues.')
