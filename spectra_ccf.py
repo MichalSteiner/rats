@@ -10,9 +10,9 @@ Created on Tue Oct  4 15:58:42 2022
 import rats.utilities as util
 import rats.spectra_manipulation as sm
 
-from astroquery.nist import Nist
-from astroquery.atomic import AtomicLineList
-from astroquery.hitran import Hitran
+# from astroquery.nist import Nist
+# from astroquery.atomic import AtomicLineList
+# from astroquery.hitran import Hitran
 import astropy
 from astropy import units as u
 import specutils as sp

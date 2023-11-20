@@ -7,8 +7,11 @@ Created on Wed Jun 30 08:34:27 2021
 
 """
 #%% Importing libraries
+import rats.parameters_utilities as parautils
 import pyvo as vo
 from astropy.nddata import NDData, StdDevUncertainty, NDDataArray
+import astropy.time as astime
+import astropy.units as u
 import numpy as np
 import os
 import re
@@ -81,7 +84,7 @@ def _load_NASA_FullTable(planet_name: str | None = None) -> pd.DataFrame:
     else:
         logger.info('Loading NASA Exoplanet Full Table for planet: '+ planet_name)
         planet_name = "'%s'"%planet_name # To have it in correct format for the search
-        FullTable = pd.DataFrame(service.search("SELECT * FROM pscomppars WHERE pl_name = %s"% planet_name))
+        FullTable = pd.DataFrame(service.search("SELECT * FROM ps WHERE pl_name = %s"% planet_name))
     logger.info("Loading finished.")
     return FullTable
 #%% Convenience function to extract NDDataArray from Composite table
@@ -89,7 +92,7 @@ def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
                                     keyword: str,
                                     parameter_name: str) -> NDDataArray:
     """
-    Load a NDDataArray from NASA Table (either Full or Composite) given a keyword.
+    Load a NDDataArray from NASA Composite Table given a keyword.
 
     Parameters
     ----------
@@ -168,7 +171,7 @@ def _load_array_from_FullTable(FullTableRow: pd.DataFrame,
         logger.debug('Value:' + str(FullTableRow[keyword]))
         logger.debug('Lower error:' + str(FullTableRow[keyword + 'err1']))
         logger.debug('Upper error:' + str(FullTableRow[keyword + 'err2']))
-        logger.debug('Reference:' + str(FullTableRow[keyword+'_reflink']))
+        logger.debug('Reference:' + str(FullTableRow[keyword[:2]+'_refname']))
         parameter = NDDataArray(
             data= FullTableRow[keyword],
             uncertainty= StdDevUncertainty(
@@ -176,15 +179,15 @@ def _load_array_from_FullTable(FullTableRow: pd.DataFrame,
                         FullTableRow[keyword + 'err2']]
                         )
                 ),
-            meta= {'reference': FullTableRow[keyword[:2]+'_reflink'],
-                   'parameter': parameter}
+            meta= {'reference': FullTableRow[keyword[:2]+'_refname'],
+                   'parameter': parameter_name}
             )
     else:
         logger.debug('Loading key:' + keyword)
         logger.debug('Value:' + str(FullTableRow[keyword]))
         logger.debug('Lower error:' + str(FullTableRow[keyword + 'err1']))
         logger.debug('Upper error:' + str(FullTableRow[keyword + 'err2']))
-        logger.debug('Reference:' + str(FullTableRow[keyword+'_reflink']))
+        logger.debug('Reference:' + str(FullTableRow[keyword[:2]+'_refname']))
         parameter = NDDataArray(
             data= FullTableRow[keyword],
             uncertainty= StdDevUncertainty(
@@ -192,31 +195,65 @@ def _load_array_from_FullTable(FullTableRow: pd.DataFrame,
                         FullTableRow[keyword + 'err2']]
                         )
                 ),
-            meta= {'reference': FullTableRow[keyword[:2]+'_reflink'],
+            meta= {'reference': FullTableRow[keyword[:2]+'_refname'],
                    'parameter': parameter_name}
             )
     return parameter
 #%% Convenience function for printing parameters
-def _print_NDDataArray(Array: NDDataArray):
-    # Removes the html link and unescape HTML encoded characters.
+def _extract_reference(reference_string: str) -> str:
+    """
+    Extract reference string for printing from the loaded keyword of NASA Table.
+    
+    First, this code removes the HTML tags with the link, and then decodes (unescape) the HTML encoded characters. 
+
+    Parameters
+    ----------
+    reference_string : str
+        Reference string as present in various instances of reference values.
+
+    Returns
+    -------
+    str
+        Reference string suitable for printing.
+    """
     pattern = re.compile('<.*?>')
-    reference = re.sub(pattern, '', Array.meta["reference"])
+    reference = re.sub(pattern, '', reference_string)
     reference = unescape(reference)
+    return reference
+#%% Print NDDataArray values and reference
+def _print_NDDataArray(Array: NDDataArray):
+    """
+    Print a NDDataArray through the logging PRINT level (custom defined by rats.utilities).
+
+    Parameters
+    ----------
+    Array : NDDataArray
+        Parameter array including the parameter name, uncertainty and reference.
+    """
+    # Removes the html link and unescape HTML encoded characters.
+    reference = _extract_reference(Array.meta["reference"])
+    # If unitless, change string None to "1"
+    if Array.unit is None:
+        unit = '1'
+    else:
+        unit = Array.unit
     # Print through logger.print level
     if Array.uncertainty is None:
-        logger.print(f'{Array.meta["parameter"]}: {Array.data} | {reference}')
+        logger.print(f'{Array.meta["parameter"]}: {Array.data} [{unit}] | {reference}')
     else:
-        logger.print(f'{Array.meta["parameter"]}: {Array.data} ± {Array.uncertainty.array} | {reference}')
+        logger.print(f'{Array.meta["parameter"]}: {Array.data} ± {Array.uncertainty.array} [{unit}] | {reference}')
     return
-
+#%% Magnitudes class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _Magnitudes():
     #TODO
     pass
+#%% Catalogues class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _Catalogues():
     #TODO
     pass
+#%% PlanetDiscovery class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _PlanetDiscovery():
     #TODO
@@ -233,15 +270,51 @@ class _PlanetDiscovery():
         return
     
     pass
-
-
+#%% Detection Flags class
 class _DetectionFlags():
     #TODO
     pass
     
-
+#%% Stellar parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _StellarParameters():
+    """
+    Class holding the stellar parameters.
+    
+    Each parameter is either None, if not defined, or a NDDataArray structure, with value, error, units and reference. For magnitudes and catalogues, these are either None if not defined or _Magnitudes, respectivelly _Catalogues classes.
+    
+    Attributes
+    ----------
+    name : str | None
+        Name of the host star, by default None.
+    stellar_type : NDDataArray | None
+        Stellar type of the host star, by default None.
+    temperature : NDDataArray | None
+        Stellar effective temperature of the host star, by default None.
+    radius : NDDataArray | None
+        Stellar radius of the host star, by default None.
+    mass : NDDataArray | None
+        Stellar mass of the host star, by default None.
+    luminosity : NDDataArray | None
+        Stellar luminosity of the host star, by default None.
+    metallicity : NDDataArray | None
+        Stellar metallicity of the host star, by default None.
+    logg : NDDataArray | None
+        Stellar logg of the host star, by default None.
+    age : NDDataArray | None
+        Stellar age of the host star, by default None.
+    density : NDDataArray | None
+        Stellar density of the host star, by default None.
+    vsini : NDDataArray | None
+        Stellar vsini of the host star, by default None.
+    rotation_period : NDDataArray | None
+        Stellar rotation period of the host star, by default None.
+    magnitudes : _Magnitudes | None
+        Stellar magnitudes of the host star, by default None.
+    catalogues : _Catalogues | None
+        Other ID numbers in various Catalogues, by default None.
+    """
+    
     name: str | None = None
     stellar_type: NDDataArray | None = None
     temperature: NDDataArray | None = None
@@ -270,10 +343,15 @@ class _StellarParameters():
         self.name = CompositeTableRow['hostname']
         self.stellar_type = _load_array_from_CompositeTable(CompositeTableRow, 'st_spectype', 'Spectral Type')
         self.temperature = _load_array_from_CompositeTable(CompositeTableRow, 'st_teff', 'Stellar Temperature')
+        self.temperature.unit = u.K
         self.radius = _load_array_from_CompositeTable(CompositeTableRow, 'st_rad', 'Stellar radius')
+        self.radius.unit = u.R_sun
         self.mass = _load_array_from_CompositeTable(CompositeTableRow, 'st_mass', 'Stellar mass')
+        self.mass.unit = u.M_sun
         self.luminosity = _load_array_from_CompositeTable(CompositeTableRow, 'st_lum', 'Stellar luminosity')
+        self.luminosity.unit = u.Lsun
         self.metallicity = _load_array_from_CompositeTable(CompositeTableRow, 'st_met', 'Stellar metalicity')
+        # TODO
         self.logg = _load_array_from_CompositeTable(CompositeTableRow, 'st_logg', 'Stellar logg')
         self.age = _load_array_from_CompositeTable(CompositeTableRow, 'st_age', 'Stellar age')
         self.density = _load_array_from_CompositeTable(CompositeTableRow, 'st_dens', 'Stellar density')
@@ -281,6 +359,9 @@ class _StellarParameters():
         self.rotation_period = _load_array_from_CompositeTable(CompositeTableRow, 'st_rotp', 'Stellar rotation period')
     
     def print_values(self):
+        """
+        Print a default set of parameters using the logging PRINT level (custom defined by rats.utilities)
+        """
         logger.print(f'Host star: {self.name}')
         
         STANDARD_STELLAR_LIST = [self.temperature,
@@ -300,10 +381,62 @@ class _StellarParameters():
     def create_latex_table(self):
         # TODO
         return
-    
-    pass
+#%% Planet parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
-class _PlanetParameters():
+class _PlanetParameters(parautils.CalculationPlanet):
+    """
+    Class holding planet parameters.
+    
+    Each parameter is either None, if not defined, or a NDDataArray structure, with value, error, units and reference. 
+    
+    Attributes
+    ----------
+    name : str | None
+        Name of the planet, by default None.
+    letter : str | None
+        Letter of the planet, by default None.
+    radius : NDDataArray | None
+        Radius of the planet, by default None.
+    mass : NDDataArray | None
+        Mass of the planet, by default None.
+    density : NDDataArray | None
+        Density of the planet, by default None.
+    semimajor_axis : NDDataArray | None
+        Semimajor axis of the planetary orbit, by default None.
+    period : NDDataArray | None
+        Orbital period of the planet, by default None.
+    impact_parameter : NDDataArray | None
+        Impact parameter of the planetary orbit, by default None.
+    inclination : NDDataArray | None
+        Inclination of the planetary orbit, by default None.
+    eccentricity : NDDataArray | None
+        Eccentricity of the planetary orbit, by default None.
+    argument_of_periastron : NDDataArray | None
+        Argument of periastron of the planetary orbit, by default None.
+    a_rs_ratio : NDDataArray | None
+        Ratio of semimajor-axis over stellar radii, by default None.
+    rs_a_ratio : NDDataArray | None
+        Ratio of stellar radii over semimajor axis, by default None.
+    keplerian_semiamplitude : NDDataArray | None
+        Semiamplitude of the keplerian orbit, by default None.
+    insolation_flux : NDDataArray | None
+        Insolation flux of the planet, by default None.
+    equilibrium_temperature : NDDataArray | None
+        Equilibrium temperature of the planet, by default None.
+    rprs : NDDataArray | None
+        Ratio of planetary radii to stellar radii, by default None.
+    epoch_periastron : NDDataArray | None
+        Epoch of periastron of the planetary orbit, by default None.
+    projected_obliquity : NDDataArray | None
+        Projected obliquity of the planetary orbit, by default None.
+    true_obliquity : NDDataArray | None
+        True obliquity of the planetary orbit, by default None.
+    discovery : _PlanetDiscovery | None
+        Basic information about discovery of this planet, by default None.
+    detection_flags : _DetectionFlags | None
+        Detection flags about the planets, by default None.
+    """
+    
     name: str | None = None
     letter: str | None = None
     
@@ -323,8 +456,8 @@ class _PlanetParameters():
     equilibrium_temperature: NDDataArray | None = None
     rprs: NDDataArray | None = None
     epoch_periastron: NDDataArray | None = None
-    obliquity: NDDataArray | None = None
-    trueobliquity: NDDataArray | None = None
+    projected_obliquity: NDDataArray | None = None
+    true_obliquity: NDDataArray | None = None
     # TODO
     discovery: _PlanetDiscovery | None = None
     detection_flags: _DetectionFlags | None = None
@@ -342,27 +475,49 @@ class _PlanetParameters():
         self.name = CompositeTableRow['pl_name']
         self.letter = CompositeTableRow['pl_letter']
         self.radius = _load_array_from_CompositeTable(CompositeTableRow, 'pl_radj', 'Planetary radius')
+        self.radius.unit = u.R_jupiter
         self.mass = _load_array_from_CompositeTable(CompositeTableRow, 'pl_bmassj', 'Planetary mass')
+        self.mass.unit = u.M_jupiter
         self.density = _load_array_from_CompositeTable(CompositeTableRow, 'pl_dens', 'Planetary density')
+        self.density.unit = u.g / (u.cm**3)
         self.semimajor_axis = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbsmax', 'Planet semimajor-axis')
+        self.semimajor_axis.unit = u.au
         self.period = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbper', 'Planetary period')
+        self.period.unit = u.day
         self.impact_parameter = _load_array_from_CompositeTable(CompositeTableRow, 'pl_imppar', 'Planetary impact parameter')
+        self.impact_parameter.unit = u.dimensionless_unscaled
         self.inclination = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbincl', 'Planet orbital inclination')
+        self.inclination.unit = u.deg
         self.eccentricity = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbeccen', 'Planetary eccentricity')
+        self.eccentricity.unit = u.dimensionless_unscaled
         self.argument_of_periastron = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orblper', 'Planetary argument of periastron')
+        self.argument_of_periastron = u.deg
         self.a_rs_ratio = _load_array_from_CompositeTable(CompositeTableRow, 'pl_ratdor', 'Planet semimajor-axis to stellar radius ratio')
-        self.rs_a_ratio = NDDataArray(1).divide(self.a_rs_ratio, handle_meta = 'first_found')
-        self.rs_a_ratio.meta['parameter'] = 'Ratio of stellar radius to planet semimajor axis'
+        self.a_rs_ratio.unit = u.dimensionless_unscaled
         self.keplerian_semiamplitude = _load_array_from_CompositeTable(CompositeTableRow, 'pl_rvamp', 'Keplerian semiamplitude')
+        self.keplerian_semiamplitude = u.m / u.s
         self.insolation_flux = _load_array_from_CompositeTable(CompositeTableRow, 'pl_insol', 'Insolation flux')
+        # TODO
+        logger.warning('Add units for insolation flux')
         self.equilibrium_temperature = _load_array_from_CompositeTable(CompositeTableRow, 'pl_eqt', 'Equilibrium temperature')
+        self.equilibrium_temperature.unit = u.K
         self.rprs = _load_array_from_CompositeTable(CompositeTableRow, 'pl_ratror', 'Ratio of planet to star radius')
+        self.rprs.unit = u.dimensionless_unscaled
         self.epoch_periastron = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbtper', 'Epoch of periastron')
-        self.obliquity = _load_array_from_CompositeTable(CompositeTableRow, 'pl_projobliq', 'Projected obliquity')
-        self.trueobliquity = _load_array_from_CompositeTable(CompositeTableRow, 'pl_trueobliq', 'True obliquity')
+        self.epoch_periastron.unit = u.deg
+        self.projected_obliquity = _load_array_from_CompositeTable(CompositeTableRow, 'pl_projobliq', 'Projected obliquity')
+        self.projected_obliquity.unit = u.deg
+        self.true_obliquity = _load_array_from_CompositeTable(CompositeTableRow, 'pl_trueobliq', 'True obliquity')
+        self.true_obliquity.unit = u.deg
+        self.rs_a_ratio = NDDataArray(1, unit= u.dimensionless_unscaled).divide(self.a_rs_ratio, handle_meta = 'first_found')
+        self.rs_a_ratio.meta['parameter'] = 'Ratio of stellar radius to planet semimajor axis'
 
+        self._calculate_gravity_acceleration()
     
     def print_values(self):
+        """
+        Print a default set of parameters using the logging PRINT level (custom defined by rats.utilities)
+        """
         logger.print(f'Planet name: {self.name}')
         
         STANDARD_PLANET_LIST = [self.radius,
@@ -372,8 +527,8 @@ class _PlanetParameters():
                                 self.equilibrium_temperature,
                                 self.eccentricity,
                                 self.period,
-                                self.obliquity,
-                                self.trueobliquity]
+                                self.projected_obliquity,
+                                self.true_obliquity]
         for array in STANDARD_PLANET_LIST:
             _print_NDDataArray(array)
         
@@ -383,8 +538,11 @@ class _PlanetParameters():
         return
     
     pass
-
+#%% System parameters class
+@dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _SystemParameters():
+    #TODO
+    
     systemic_velocity: NDData | None = None
     distance: NDData | None = None
     number_of_stars: int | None = None
@@ -413,73 +571,143 @@ class _SystemParameters():
     
     pass
 
+#%% Ephemeris parameters class
+@dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _EphemerisParameters():
-    transit_center: NDData | None = None
-    period: NDData | None = None
-    transit_length: NDData | None = None
-    transit_depth: NDData | None = None
-    occultation_depth: NDData | None = None
+    """
+    Ephemeris parameters class.
+    
+    Attributes
+    ----------
+    transit_center : NDDataArray | None
+        Transit center of the planetary transit, by default None.
+    period : NDDataArray | None
+        Orbital period of the planet, by default None.
+    transit_length : NDDataArray | None
+        Transit length of the planetary transit, by default None.
+    transit_depth : NDDataArray | None
+        Transit depth of the planetary transit, by default None.
+    occultation_depth : NDDataArray | None
+        Occultation depth of the planetary eclipse, by default None.
+    ttv_flag : NDDataArray | None
+        TTV flag for the planet, by default False.
+    """
+    
+    transit_center: NDDataArray | None = None
+    period: NDDataArray | None = None
+    transit_length: NDDataArray | None = None
+    transit_depth: NDDataArray | None = None
+    occultation_depth: NDDataArray | None = None
     ttv_flag: bool = False
     
     def _try_load_single_value_fromFullTable(self,
-                                             FullTable: pd.DataFrame,
-                                             CompositeTable: pd.DataFrame,
+                                             FullTableRow: pd.DataFrame,
+                                             CompositeTableRow: pd.DataFrame,
                                              keyword: str,
-                                             parameter_name: str):
+                                             parameter_name: str) -> NDDataArray:
+        """
+        Try to load value from Full NASA table, and no value is found loads the composite value.
+        
+        Parameters
+        ----------
+        FullTableRow : pd.DataFrame
+            Row with the particular reference of interest.
+        CompositeTableRow : pd.DataFrame
+            CompositeTableRow for given planet.
+        keyword : str
+            Which keyword to load.
+        parameter_name : str
+            What parameter is being loaded.
+
+        Returns
+        -------
+        parameter : NDDataArray
+            Loaded parameter outputed as NDDataArray
+        """
         try:
-            parameter = _load_array_from_FullTable(FullTableRow= FullTable,
+            logger.debug('='*25)
+            logger.debug('Try:')
+            logger.debug(FullTableRow[keyword])
+            logger.debug(_extract_reference(FullTableRow['pl_refname']))
+            parameter = _load_array_from_FullTable(FullTableRow= FullTableRow,
                                                    keyword= keyword,
                                                    parameter_name= parameter_name
                                                    )
+            if np.isnan(parameter):
+                logger.debug('NaN detected, loading from CompositeTable')
+                raise # Go to except statement to load Composite value
+            logger.debug('Successful load')
         except:
-            parameter = _load_array_from_CompositeTable(CompositeTableRow= CompositeTable,
+            logger.debug('='*25)
+            logger.debug('Exception:')
+            logger.debug(CompositeTableRow[keyword])
+            if keyword != 'ttv_flag':
+                logger.debug(_extract_reference(CompositeTableRow[keyword + '_reflink']))
+            parameter = _load_array_from_CompositeTable(CompositeTableRow= CompositeTableRow,
                                                         keyword= keyword,
                                                         parameter_name=parameter_name)
+            logger.debug('Failed to load Full table')
         return parameter
     
     def _load_values_from_FullTable(self,
-                                    FullTablePlanet: pd.DataFrame,
+                                    FullTablePlanetRow: pd.DataFrame,
                                     CompositeTableRow: pd.DataFrame):
+        """
+        Loads values from FullTable or Composite if no value is detected.
+
+        Parameters
+        ----------
+        FullTablePlanetRow : pd.DataFrame
+            Full NASA table for given reference for given planet.
+        CompositeTableRow : pd.DataFrame
+            Composite NASA table for given planet.
+        """
+        self.reference = _extract_reference(FullTablePlanetRow['pl_refname'])
         
         self.transit_center = self._try_load_single_value_fromFullTable(
-            FullTable = FullTablePlanet,
-            CompositeTable= CompositeTableRow,
+            FullTableRow = FullTablePlanetRow,
+            CompositeTableRow= CompositeTableRow,
             keyword = 'pl_tranmid',
             parameter_name= 'Transit center'
             )
         self.period = self._try_load_single_value_fromFullTable(
-            FullTable = FullTablePlanet,
-            CompositeTable= CompositeTableRow,
+            FullTableRow = FullTablePlanetRow,
+            CompositeTableRow= CompositeTableRow,
             keyword = 'pl_orbper',
             parameter_name= 'Planetary period'
             )
         self.transit_length = self._try_load_single_value_fromFullTable(
-            FullTable = FullTablePlanet,
-            CompositeTable= CompositeTableRow,
+            FullTableRow = FullTablePlanetRow,
+            CompositeTableRow= CompositeTableRow,
             keyword = 'pl_trandur',
             parameter_name= 'Transit length'
             )
         self.transit_depth = self._try_load_single_value_fromFullTable(
-            FullTable = FullTablePlanet,
-            CompositeTable= CompositeTableRow,
+            FullTableRow = FullTablePlanetRow,
+            CompositeTableRow= CompositeTableRow,
             keyword = 'pl_trandep',
             parameter_name= 'Transit depth'
             )
         self.occultation_depth = self._try_load_single_value_fromFullTable(
-            FullTable = FullTablePlanet,
-            CompositeTable= CompositeTableRow,
+            FullTableRow = FullTablePlanetRow,
+            CompositeTableRow= CompositeTableRow,
             keyword = 'pl_occdep',
             parameter_name= 'Occultation depth'
             )
         self.ttv_flag = self._try_load_single_value_fromFullTable(
-            FullTable = FullTablePlanet,
-            CompositeTable= CompositeTableRow,
+            FullTableRow = FullTablePlanetRow,
+            CompositeTableRow= CompositeTableRow,
             keyword = 'ttv_flag',
             parameter_name= 'TTV flag'
             )
+        return
+        
         
     def print_values(self):
-        logger.print(f'Ephemeris:')
+        """
+        Print a default set of parameters using the logging PRINT level (custom defined by rats.utilities)
+        """
+        logger.print(f'Ephemeris: ' + self.reference)
         
         STANDARD_EPHEMERIS_LIST = [self.transit_center,
                                    self.period,
@@ -488,19 +716,31 @@ class _EphemerisParameters():
         for array in STANDARD_EPHEMERIS_LIST:
             _print_NDDataArray(array)
         return
+    
+    
     def create_latex_table(self):
         # TODO
         return
-    pass
 
+
+#%% System parameters class
 class SystemParameters():
-    
-    
     pass
-
+#%% System parameters Composite class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class SystemParametersComposite():
+    """
+    Ephemeris parameters class.
     
+    Attributes
+    ----------
+    Star : _StellarParameters
+        Stellar parameters saved as a _StellarParameters class
+    Planet : _PlanetParameters
+        Planet parameters saved as a _PlanetParameters class
+    Ephemeris : _EphemerisParameters
+        Ephemeris parameters saved as a _EphemerisParametes class
+    """
     Star: _StellarParameters = _StellarParameters()
     Planet: _PlanetParameters = _PlanetParameters()
     Ephemeris: _EphemerisParameters = _EphemerisParameters()
@@ -513,19 +753,49 @@ class SystemParametersComposite():
     
     def load_NASA_CompositeTable_values(self,
                                         planet_name: str):
+        """
+        Loads values from NASA Composite table. For Ephemeris attribute, full table is used.
+
+        Parameters
+        ----------
+        planet_name : str
+            Planet name as defined by NASA archive.
+        """
         CompositeTableRow = _load_NASA_CompositeTable(system_name = None,
                                                       planet_name = planet_name).iloc[0]
         FullTablePlanet = _load_NASA_FullTable(planet_name = planet_name)
+        
         assert CompositeTableRow['pl_name'] == planet_name, 'Composite table does not include the planet name. This should not happen in any scenario.'
         
         self.Star._load_values_from_composite_table(CompositeTableRow= CompositeTableRow)
         self.Planet._load_values_from_composite_table(CompositeTableRow= CompositeTableRow)
-        self.Ephemeris._load_values_from_FullTable(FullTablePlanet= FullTablePlanet,
-                                                   CompositeTableRow= CompositeTableRow)
+        
+        self.EphemerisPlanet = EphemerisPlanet(planet_name= planet_name,
+                                           FullTablePlanet= FullTablePlanet,
+                                           CompositeTableRow= CompositeTableRow)
+        
+        logger.info('Calculated most precise ephemeris to current date.')
+        self.Ephemeris = self.EphemerisPlanet.find_most_precise()
+        logger.info('    In case of needing different set, either manual set:')
+        logger.info('        self.Ephemeris = self.EphemerisPlanet[ind]')
+        logger.info('            where ind is indice of the ephemeris set you want')
+        logger.info('    or:')
+        logger.info('        self.Ephemeris = _EphemerisParameters() with exact arguments as extracted')
+        logger.info('    or:')
+        logger.info('        self.Ephemeris = self.EphemerisPlanet.find_most_precise(night = observed_night)')
+        logger.info('            which will take into account most precise ephemeris for given night')
+        
+        for ind, FullTablePlanetRow in FullTablePlanet.iterrows():
+            self.Ephemeris._load_values_from_FullTable(FullTablePlanetRow= FullTablePlanetRow,
+                                                       CompositeTableRow= CompositeTableRow)
+
+            self.Ephemeris.print_values()
         return
     
     def print_main_values(self):
-        # TODO
+        """
+        Print a default set of parameters using the logging PRINT level (custom defined by rats.utilities)
+        """
         logger.print('='*25)
         self.Star.print_values()
         logger.print('='*25)
@@ -547,17 +817,94 @@ class SystemParametersFull():
     pass
 
 class EphemerisPlanet():
-    
+    # TODO
     def __init__(self,
+                 planet_name: str,
+                 FullTablePlanet: pd.DataFrame | None = None,
+                 CompositeTableRow: pd.DataFrame | None = None,
                  ):
+        self.Ephemeris_list = []
+        self.planet_name = planet_name
         
+        if FullTablePlanet is None:
+            FullTablePlanet = _load_NASA_FullTable(planet_name = planet_name)
+        if CompositeTableRow is None:
+            CompositeTableRow = _load_NASA_CompositeTable(system_name = None,
+                                                          planet_name = planet_name).iloc[0]
         
-        
+        for ind, FullTablePlanetRow in FullTablePlanet.iterrows():
+            Ephemeris = _EphemerisParameters()
+            Ephemeris._load_values_from_FullTable(
+                    FullTablePlanetRow= FullTablePlanetRow,
+                    CompositeTableRow= CompositeTableRow
+                    )
+            self.Ephemeris_list.append(
+                Ephemeris
+                )
         return
-    pass
+    
+    def print_values(self):
+        for Ephemeris in self.Ephemeris_list:
+            Ephemeris.print_values()
+        return
+    
+    def find_most_precise(self,
+                          night: astime.Time | None = None):
+        """
+        Find the most precise ephemeris given a date.
+
+        Parameters
+        ----------
+        night : astime.Time | None, optional
+            Time where to look for transit window, by default None. If None, select current time.
+
+        Returns
+        -------
+        BestEphemeris : _EphemerisParameters
+            Best ephemeris solution for given night.
+        """
+        
+        if night is None:
+            night = astime.Time.now()
+        
+        BestEphemeris = None
+        
+        for Ephemeris in self.Ephemeris_list:
+            if BestEphemeris is None:
+                lowest_uncertainty = self._calculate_uncertainty(Ephemeris, night)
+                BestEphemeris = Ephemeris
+            else:
+                if lowest_uncertainty > self._calculate_uncertainty(Ephemeris, night):
+                    BestEphemeris = Ephemeris
+        return BestEphemeris
+
+    def _calculate_uncertainty(self,
+                               Ephemeris: _EphemerisParameters,
+                               night: astime.Time):
+        
+        n, remainder = divmod((night.jd - Ephemeris.transit_center), Ephemeris.period)
+        n+=1
+        
+        if Ephemeris.period.data < 1.5: # To avoid falling in different transit window
+            n+=1
+        
+        # Calculate T_0 and sigma_T_0 for given transit
+        current_transit_center = astime.Time(Ephemeris.transit_center + n * Ephemeris.period, format = 'jd')
+        uncertainty_transit_window = np.sqrt(
+            Ephemeris.transit_center.uncertainty.array**2 + 
+            n**2 * Ephemeris.period.uncertainty.array**2
+            ) * u.day
+        
+        logger.print(f'Transit window on night: {night}' )
+        logger.print(f'    Calculated center: {current_transit_center.datetime}')
+        logger.print(f'    Uncertainty: {uncertainty_transit_window.to(u.h)} [h]')
+        logger.print(f'    Uncertainty: {uncertainty_transit_window.to(u.min)} [min]')
+        logger.print(f'    Uncertainty: {uncertainty_transit_window.to(u.s)} [s]')
+        
+        return uncertainty_transit_window
 
 class CompositeTable():
-    
+    # TODO
     def _save(self):
         
         return
@@ -587,16 +934,19 @@ class FullTable():
 if __name__ == '__main__':
     
     logger.info('Testing setup for rats.parameters module')
-    os.chdir('/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test')
+    os.chdir('/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_TOI-132')
     system_name = 'TOI-132'
     planet_name = 'TOI-132 b'
- 
+    
     logger.info('Loading system parameters for system: ' + system_name)
     TOI132 = SystemParametersComposite()
     TOI132.load_NASA_CompositeTable_values(planet_name = 'TOI-132 b')
     TOI132.print_main_values()
     
+    
     # CompositeTableAll = _load_NASA_CompositeTable(system_name = None)
     # FullTableTOI132 = _load_NASA_FullTable(planet_name = planet_name)
     # FullTableAll = _Load_NASA_Full_Table(planet_name = None)
     logger.info('Test succesful. All Tables were succesfully loaded:')
+    
+# %%

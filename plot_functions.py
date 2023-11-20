@@ -7,7 +7,7 @@ Created on Mon Jun  7 10:26:21 2021
 Plotting functions
 """
 #%% Importing libraries
-import chaos
+import rats
 from typing import List
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -223,72 +223,72 @@ def highlight_planet_group(
                           markerfacecolor=color,markersize=s/15)
     # handle = mpatches.Patch(facecolor=color,edgecolor='black', label=label)
     return handle
-#%%
-def radius_insolation_plot(exo_class:rats.parameters.observed_exoplanets,
-                           lists_highlighted_planets:List = [[]],
-                           lists_highlighted_labels:List = [[]],
-                           lists_highlighted_colors:List = sns.color_palette("bright"),
-                           xkey:str = 'pl_insol',
-                           ykey:str = 'pl_rade',
-                           cmap:mpl.colors.LinearSegmentedColormap = sns.color_palette("ch:start=.2,rot=-.3", as_cmap=True)
-                           ) -> tuple[mpl.figure.Figure,
-                                plt.Axes]:
-    '''
-    Create a radius vs insolation flux plot of all exoplanets. Depending on the lists variable input, it highlights selected planet(-s) in the diagram with given color.
+# #%%
+# def radius_insolation_plot(exo_class:rats.parameters.observed_exoplanets,
+#                            lists_highlighted_planets:List = [[]],
+#                            lists_highlighted_labels:List = [[]],
+#                            lists_highlighted_colors:List = sns.color_palette("bright"),
+#                            xkey:str = 'pl_insol',
+#                            ykey:str = 'pl_rade',
+#                            cmap:mpl.colors.LinearSegmentedColormap = sns.color_palette("ch:start=.2,rot=-.3", as_cmap=True)
+#                            ) -> tuple[mpl.figure.Figure,
+#                                 plt.Axes]:
+#     '''
+#     Create a radius vs insolation flux plot of all exoplanets. Depending on the lists variable input, it highlights selected planet(-s) in the diagram with given color.
 
-    Parameters
-    ----------
-    exo_class : rats.parameters.observed_exoplanets
-        Class containing all the observed exoplanets to date.
-    lists_highlighted_planets : List, optional
-        Lists of lists of planets to highlight in the diagram. The default is [[]].
-    lists_highlighted_labels : List, optional
-        Lists of lists of labels to highlight in the diagram. The default is [[]].
-    lists_highlighted_colors : List, optional
-        Lists of lists of colors to highlight in the diagram. The default is sns.color_palette("bright").
-    xkey : str, optional
-        Key to use for NASA archive on x-axis. The default is 'pl_insol'.
-    ykey : str, optional
-        Key to use for NASA archive on y-axis. The default is 'pl_rade'.
-    cmap : mpl.colors.LinearSegmentedColormap, optional
-        Colormap to use for the KDE plot. The default is sns.dark_palette("#69d", reverse=False, as_cmap=True).
+#     Parameters
+#     ----------
+#     exo_class : rats.parameters.observed_exoplanets
+#         Class containing all the observed exoplanets to date.
+#     lists_highlighted_planets : List, optional
+#         Lists of lists of planets to highlight in the diagram. The default is [[]].
+#     lists_highlighted_labels : List, optional
+#         Lists of lists of labels to highlight in the diagram. The default is [[]].
+#     lists_highlighted_colors : List, optional
+#         Lists of lists of colors to highlight in the diagram. The default is sns.color_palette("bright").
+#     xkey : str, optional
+#         Key to use for NASA archive on x-axis. The default is 'pl_insol'.
+#     ykey : str, optional
+#         Key to use for NASA archive on y-axis. The default is 'pl_rade'.
+#     cmap : mpl.colors.LinearSegmentedColormap, optional
+#         Colormap to use for the KDE plot. The default is sns.dark_palette("#69d", reverse=False, as_cmap=True).
 
-    Returns
-    -------
-    fig : mpl.figure.Figure
-        Figure container with the plot.
-    ax : plt.Axes
-        Axes container with the given plot.
+#     Returns
+#     -------
+#     fig : mpl.figure.Figure
+#         Figure container with the plot.
+#     ax : plt.Axes
+#         Axes container with the given plot.
 
-    '''
-    # cmap = sns.dark_palette("#69d", reverse=False, as_cmap=True)
-    # cmap = sns.color_palette("ch:start=.2,rot=-.3", as_cmap=True)
-    fig,ax = plot_mass_insolation(exo_class,cmap,xkey,ykey)
+#     '''
+#     # cmap = sns.dark_palette("#69d", reverse=False, as_cmap=True)
+#     # cmap = sns.color_palette("ch:start=.2,rot=-.3", as_cmap=True)
+#     fig,ax = plot_mass_insolation(exo_class,cmap,xkey,ykey)
     
-    list_handles = []
-    for planet, label, color in zip(lists_highlighted_planets,
-                                    lists_highlighted_labels,
-                                    lists_highlighted_colors):
-        handle = highlight_planet_group(exo_class,
-                                           planet,
-                                           color, 
-                                           ax,
-                                           xkey,
-                                           ykey,
-                                           label,
-                                           marker='o',
-                                           s=500
-                                           )
-        list_handles.append(handle)
+#     list_handles = []
+#     for planet, label, color in zip(lists_highlighted_planets,
+#                                     lists_highlighted_labels,
+#                                     lists_highlighted_colors):
+#         handle = highlight_planet_group(exo_class,
+#                                            planet,
+#                                            color, 
+#                                            ax,
+#                                            xkey,
+#                                            ykey,
+#                                            label,
+#                                            marker='o',
+#                                            s=500
+#                                            )
+#         list_handles.append(handle)
     
-    plt.legend(handles=
-        list_handles
-        )
-    ax.set_xlim(10E4,10E-1)
-    # ax.set_ylim(10E-1,25E0)
-    ax.get_figure().gca().set_title("")
+#     plt.legend(handles=
+#         list_handles
+#         )
+#     ax.set_xlim(10E4,10E-1)
+#     # ax.set_ylim(10E-1,25E0)
+#     ax.get_figure().gca().set_title("")
 
-    return fig,ax
+#     return fig,ax
 
 #%% draw_lightcurves
 def draw_lightcurves(directory,sys_para,offset= 2450000,flux_step=0.02,phase_fraction=20):

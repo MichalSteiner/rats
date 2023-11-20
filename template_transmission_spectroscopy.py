@@ -15,7 +15,7 @@ Template for transmission spectroscopy pipeline using the RATS (Rapid Analysis o
 # Rats library - custom TS pipeline
 import rats
 import rats.eso as eso # Loading ESO instruments
-import parameters_old as para # System parameters
+import rats.parameters as para # System parameters
 import rats.single_use as su # Single use functions
 import rats.plot_spectra as ps # Spectra plotting
 import rats.spectra_manipulation as sm # Spectra manipulation
@@ -37,7 +37,10 @@ import astropy.io.fits as fits
 # Others
 import numpy as np
 import os
+import logging
 
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
 #%% Select type of plots (normal vs dark mode)
 # import rats.matplotlib_style_sheets.dark_mode_presentation
 #%% Flags to force loads and skips of functions
@@ -68,8 +71,9 @@ mol.run_molecfit_all(main_directory)
 os.chdir(main_directory)
 #%% Loading parameters
 # TODO: Change the name of the system
-sys_para = para.system_parameters_class('Name_of_the_system')
-sys_para.load_nasa_parameters('Name_of_the_planet_as_defined_by_NASA_archive',
+# TODO: Change the name of the system
+system_parameters = para.SystemParametersComposite()
+system_parameters.load_nasa_parameters('Name_of_the_planet_as_defined_by_NASA_archive',
                               force_load=True
                               )
 #%% Check the original references!
@@ -122,7 +126,7 @@ sys_para.load_nasa_parameters('Name_of_the_planet_as_defined_by_NASA_archive',
 # =============================================================================
 # Print the system parameter values
 # =============================================================================
-sys_para.print_values()
+system_parameters.print_values()
 # =============================================================================
 # Create system parameters table
 # This will print out latex code in the console to copy-paste into your papere
@@ -130,7 +134,7 @@ sys_para.print_values()
 # sys_para.create_system_table()
 
 #%% Get equivalency and custom units for given system
-equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num = sm.custom_transmission_units(sys_para)
+equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num = sm.custom_transmission_units(system_parameters)
 
 #%% Loading exoplanet table 
 # =============================================================================
@@ -189,8 +193,8 @@ data_deblaze_s1d_A = eso.load_all(directory_spectra,
 # =============================================================================
 # TODO: Replace the S1D name with S2D if using it instead
 # =============================================================================
-of.update_phase_and_vel(data_deblaze_s1d_A,sys_para)
-para.update_transit(data_deblaze_s1d_A,sys_para)
+of.update_phase_and_vel(data_deblaze_s1d_A,system_parameters)
+para.update_transit(data_deblaze_s1d_A,system_parameters)
 #%% Calculate master A and B spectrum
 # =============================================================================
 # Calculate master fiber A and B spectrum
@@ -367,7 +371,7 @@ out_spectrum = sm.replace_flux_units_transmission(out_spectrum, R)
 # Plot the transmission spectrum with rough estimates on the uncertainties
 # =============================================================================
 ps.plot_transmission_spectrum(transmission_spectrum,
-                              sys_para,
+                              system_parameters,
                               rats.lists.sodium_doublet,
                               )
 

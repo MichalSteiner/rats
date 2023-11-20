@@ -15,8 +15,6 @@ import os
 from functools import wraps
 import inspect
 import logging
-
-import logging
 logger = logging.getLogger(__name__)
 
 def addLoggingLevel(levelName, levelNum, methodName=None):
@@ -48,11 +46,14 @@ def addLoggingLevel(levelName, levelNum, methodName=None):
         methodName = levelName.lower()
 
     if hasattr(logging, levelName):
-       raise AttributeError('{} already defined in logging module'.format(levelName))
+        pass
+    #    raise AttributeError('{} already defined in logging module'.format(levelName))
     if hasattr(logging, methodName):
-       raise AttributeError('{} already defined in logging module'.format(methodName))
+        pass
+    #    raise AttributeError('{} already defined in logging module'.format(methodName))
     if hasattr(logging.getLoggerClass(), methodName):
-       raise AttributeError('{} already defined in logger class'.format(methodName))
+        pass
+    #    raise AttributeError('{} already defined in logger class'.format(methodName))
 
     # This method was inspired by the answers to Stack Overflow post
     # http://stackoverflow.com/q/2183233/2988730, especially
@@ -68,7 +69,7 @@ def addLoggingLevel(levelName, levelNum, methodName=None):
     setattr(logging.getLoggerClass(), methodName, logForLevel)
     setattr(logging, methodName, logToRoot)
 
-def default_logger_format(logger):
+def default_logger_format(logger_update):
     addLoggingLevel('PRINT', 25, methodName=None)
     
     LOG_LEVEL = logging.INFO
@@ -82,9 +83,9 @@ def default_logger_format(logger):
     stream = logging.StreamHandler()
     stream.setLevel(LOG_LEVEL)
     stream.setFormatter(formatter)
-    logger.setLevel(LOG_LEVEL)
-    logger.addHandler(stream)
-    return logger
+    logger_update.setLevel(LOG_LEVEL)
+    logger_update.addHandler(stream)
+    return logger_update
 #%% List of decorators
 # Basic set to time a function, try loading and saving and to track progress
 # from chaos.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function,save_figure, todo_function
