@@ -52,7 +52,7 @@ def open_tarfile(directory: str,
     logger.info('Opening tar gz file:')
     logger.info('   ' + directory + '/' + filename)
     logger.warning('This operation can take long time (~10minutes) if the tar.gz file is large.')
-    logger.warning('    Length of the file is:' + str(len(file.getmembers())))
+    logger.warning('    Length of the file is: ' + str(len(file.getmembers())))
         
     for ind,member in enumerate(file.getmembers()):
         member.name = member.name.replace(':','_')
@@ -138,6 +138,10 @@ def _create_folder_general(main_directory: str):
                 exist_ok = True)
     os.makedirs(main_directory + '/' +
                 'paper/figures',
+                mode = 0o777,
+                exist_ok = True)
+    os.makedirs(main_directory + '/' +
+                'saved_data',
                 mode = 0o777,
                 exist_ok = True)
     return
@@ -282,6 +286,7 @@ def setup_routine(original_directory: str,
         if not(rerun) and len(os.listdir(main_directory+'/spectroscopy_data')) != 0:
             return
     
+    logger.info('Preparing the default tree directory for the dataset.')
     _set_tree_directory(original_directory,
                         main_directory,
                         file_types = file_types)
@@ -291,7 +296,7 @@ def setup_routine(original_directory: str,
 if __name__ == '__main__':
     logger.info('Testing setup for rats.single_use module')
     
-    original_directory = '/media/chamaeleontis/Observatory_main/Data_all_raw/TOI-132'
+    original_directory = '/media/chamaeleontis/Observatory_main/Data_all_raw/test2_TOI132'
     main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test'
     
     setup_routine(original_directory= original_directory,

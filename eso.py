@@ -116,10 +116,12 @@ def load_S1D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
         'header': main_header,
         'BERV_corrected': True,
         'RF_Barycenter': True,
-        'RF': 'Barycenter',
+        'RF': 'Barycenter_Sol',
         'vacuum': False,
         'air': True
         })
+    meta.update(_load_meta_from_header(main_header))
+    
     spectrum = sp.Spectrum1D(
         spectral_axis= wavelength,
         flux= flux,
@@ -159,10 +161,13 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
         'header': main_header,
         'BERV_corrected': True,
         'RF_Barycenter': True,
-        'RF': 'Barycenter',
+        'RF': 'Barycenter_Sol',
         'vacuum': False,
         'air': True
         })
+    
+    meta.update(_load_meta_from_header(main_header))
+    
     spectrum = sp.SpectrumCollection(
         flux = flux * u.ct,
         spectral_axis = wavelength_air * u.AA,
@@ -527,17 +532,17 @@ def _basic_meta_parameters() -> dict:
         'RF_Star': False,
         'RF_Planet': False,
         'RF': 'undefined',
-        'systemic_velocity_corrected': False,
         'v_sys_corrected':False,
         'v_star_corrected':False,
         'v_planet_corrected':False,
         'Night': 'undefined',
         'Night_num': 'undefined',
         'Night_spec_num': 'undefined',
-        'vel_pl': 'undefined',
-        'vel_st': 'undefined',
+        'velocity_planet': 'undefined',
+        'velocity_star': 'undefined',
         'BJD': 'undefined',
-        'BERV': 'undefined',
+        'velocity_BERV': 'undefined',
+        'velocity_system': 'undefined',
         'Seeing': 'undefined',
         'Airmass': 'undefined',
         'S_N': 'undefined',
@@ -609,13 +614,13 @@ def _load_meta_from_header(header: fits.header.Header) -> dict:
     # Create dictionary
     meta = {
             'BJD':header['HIERARCH ESO QC BJD'] * u.day, # BJD
-            'BERV':header['HIERARCH ESO QC BERV'] * 1000 * u.m / u.s , # BERV velocity
+            'velocity_BERV':header['HIERARCH ESO QC BERV'] * 1000 * u.m / u.s , # BERV velocity
             'Airmass':np.mean([header['HIERARCH ESO TEL%s AIRM START'%(UT)],
                                header['HIERARCH ESO TEL%s AIRM END'%(UT)]]), # Airmass
             'Seeing':np.mean([header['HIERARCH ESO TEL%s AMBI FWHM START'%(UT)],
                               header['HIERARCH ESO TEL%s AMBI FWHM END'%(UT)]]), # Seeing
             'S_N_all':sn, # Signal-to-noise,
-            'Average S_N':sn[0],
+            'Average_S_N':sn[0],
             'Exptime':header['EXPTIME'] * u.s, #Exposure time,
             'instrument': header['INSTRUME'],
             'Night': header['DATE-OBS'][:10],
@@ -647,7 +652,7 @@ def _mask_flux_array(flux: u.Quantity) -> np.ndarray:
 #%% Testing function
 if __name__ == '__main__':
     logger.info('Testing setup for rats.eso module.')
-    main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test_WASP90'
+    main_directory = '/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test'
     
     for spectra_member in _SpectraFormat:
         if 'CCF' in spectra_member.name:
@@ -669,7 +674,7 @@ if __name__ == '__main__':
                 force_load= False,
                 force_skip= False,
                 pkl_name= spectra_member.name + fiber_member.name + '.pkl'
-            )
+                )
             logger.info('Loaded '+ str(len(spectra_list)) + ' number of spectra')
             logger.info('    Succesfully loaded format:' + spectra_member.name + ' and fiber: ' + fiber_member.name)
     logger.info('Test succesful. Check logs for issues.')

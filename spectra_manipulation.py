@@ -9,7 +9,10 @@ Created on Mon Sep  6 13:34:34 2021
 import specutils as sp
 import astropy
 import numpy as np
+import rats.parameters as para
+import rats.spectra_manipulation_subroutines.calculation as smcalc
 import astropy.units as u
+from functools import singledispatch 
 import astropy.io.fits as fits
 from copy import deepcopy
 import astropy.constants as con
@@ -27,31 +30,58 @@ import sys
 import time
 import traceback
 from astropy.wcs import WCS
-from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function
-from typing import Callable, Iterator, Union, Optional, Tuple, Any
+from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function, default_logger_format
+from typing import Any
+import logging
 
-#%% Type aliases
-# Spectrum1D object as defined by specutils
-Spectrum1D = sp.spectra.spectrum1d.Spectrum1D
-# SpectrumCollection object as defined by specutils
-SpectrumCollection = sp.spectra.spectrum_collection.SpectrumCollection
-# SpectrumList object as defined by specutils
-SpectrumList = sp.spectra.spectrum_list.SpectrumList
-# Array object as defined by numpy
-Array = np.ndarray
-# Header object as defined by astropy.io.fits
-Header = fits.header.Header
-# System parameter object - Will not throw errors as each function expect different set of parameters only
-SystemParameters = Any
-# Unit object - Will not throw errors
-Unit = Any
-# Equivalency object - Will not throw errors
-Equivalency = Any
-
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
 #%% Default pickler
 set_loky_pickler('dill')
+
+def mask_non_photon_noise_dominated_pixels_in_list(spectrum_list: sp.SpectrumList,
+                                                   threshold: float= 0.5) -> sp.SpectrumList:
+    """
+    Give a spectra list an updated mask to mask the non-photon noise dominated pixels.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectra list for which to find the mask.
+    threshold : float, optional
+        Threshold by which to mask, by default 0.5. This masks pixels that have 50% structure of non-photon noise. The factor is a percentage of how much "domination" should the non-photon noise sources have. For example, to get a 10% mask (pixels with non-photon noise on the order of magnitude as the photon noise), threshold = 0.1.
+        
+    Returns
+    -------
+    spectrum_list : sp.SpectrumList
+        Spectra list object with updated mask attribute.
+    """
+    new_spectrum_list = sp.SpectrumList()
+    
+    for spectrum in spectrum_list:
+        new_spectrum_list.append(
+            smcalc._mask_non_photon_noise_dominated_pixels_in_spectrum(spectrum= spectrum,
+                                                                threshold= threshold)
+            )
+    return new_spectrum_list
+
+#%% Execute masks in spectrum list
+def execute_mask_in_list(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
+    # TODO
+    # DOCUMENTME
+    
+    new_spectrum_list = sp.SpectrumList()
+    for spectrum in spectrum_list:
+        new_spectrum_list.append(
+            smcalc._execute_mask_in_spectrum(spectrum= spectrum)
+        )
+    
+    return new_spectrum_list
+
+
 #%% custom_transmission_units
-def custom_transmission_units(sys_para: SystemParameters) -> tuple[Equivalency, Unit, Unit, Unit, Unit, Unit]:
+def custom_transmission_units(sys_para: para.SystemParametersComposite
+                              ) -> tuple[u.Equivalency, u.Unit, u.Unit, u.Unit, u.Unit, u.Unit]:
     """
     Defines transmission spectrum specific units for given planet. Conversion equations are available at https://www.overleaf.com/read/gkdtkqvwffzn
 
@@ -97,8 +127,8 @@ def custom_transmission_units(sys_para: SystemParameters) -> tuple[Equivalency, 
         [
             # Planetary radius (white-light radius assumed)
             (F_lam, R_plam,
-                  lambda x: rat* (1-x+x/rat**2)**(1/2),
-                  lambda x: (x**2 - rat**2)/(1-rat**2)
+                lambda x: rat* (1-x+x/rat**2)**(1/2),
+                lambda x: (x**2 - rat**2)/(1-rat**2)
               ),
             # R = (1- Flam)
             (F_lam, R,
@@ -149,36 +179,10 @@ def custom_transmission_units(sys_para: SystemParameters) -> tuple[Equivalency, 
     
     return equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num
 
-#%% replace_spectral_axis
-def replace_spectral_axis(spectrum, spectral_axis):
-    """
-    Convenience function for replacing spectrum spectral axis (in case it resets to pixels due to WCS BS)
-
-    Parameters
-    ----------
-    spectrum : sp.Spectrum1D
-        Spectrum for which to replace spectral_axis.
-    spectral_axis : sp.spectral_axis
-        Spectral_axis object of spectrum.
-
-    Returns
-    -------
-    new_spectrum : sp.Spectrum1D
-        Spectrum with replaced spectral_axis.
-
-    """
-    new_spectrum = sp.Spectrum1D(
-        spectral_axis = spectral_axis,
-        flux = spectrum.flux,
-        uncertainty = spectrum.uncertainty,
-        meta = spectrum.meta.copy(),
-        mask = spectrum.mask,
-        wcs = add_spam_wcs(1)
-        )
-    return new_spectrum
 
 #%% extract_subregion
-def extract_subregion(spectrum,subregion):
+def _extract_subregion(spectrum: sp.Spectrum1D,
+                       subregion: sp.SpectralRegion) -> np.ndarray:
     """
     Convenience function that extracts indices of given subregion
 
@@ -191,7 +195,7 @@ def extract_subregion(spectrum,subregion):
 
     Returns
     -------
-    ind : array
+    ind : np.ndarray
         Indices of which pixels to include.
 
     """
@@ -204,7 +208,8 @@ def extract_subregion(spectrum,subregion):
     return ind
 
 #%% extract_region
-def extract_region(spectrum,spectral_region):
+def extract_region_in_spectrum(spectrum: sp.Spectrum1D,
+                               spectral_region: sp.SpectralRegion) -> sp.Spectrum1D:
     """
     Extract region from spectrum
 
@@ -224,7 +229,7 @@ def extract_region(spectrum,spectral_region):
     ind = np.array([],dtype =int)
     
     for subregion in spectral_region: # Extract all indices 
-        ind = np.append(ind,(extract_subregion(spectrum,subregion)))
+        ind = np.append(ind,(_extract_subregion(spectrum,subregion)))
     cut_spectrum = sp.Spectrum1D( # Create new spectrum with old parameters
         spectral_axis =spectrum.spectral_axis[ind],
         flux = spectrum.flux[ind],
@@ -233,9 +238,11 @@ def extract_region(spectrum,spectral_region):
         meta = spectrum.meta.copy(),
         wcs = add_spam_wcs(1)
         )
+    
     return cut_spectrum
 #%% extract_region_list
-def extract_region_list(spec_list,spectral_region):
+def extract_region_in_list(spectrum_list: sp.SpectrumList,
+                           spectral_region: sp.SpectralRegion) -> sp.SpectrumList:
     """
     Extracts region of wavelength from list of spectra
 
@@ -248,38 +255,16 @@ def extract_region_list(spec_list,spectral_region):
 
     Returns
     -------
-    new_spec_list : sp.SpectrumList
+    new_spectrum_list : sp.SpectrumList
         Cutted spectrum list based on spectral region.
 
     """
-    new_spec_list = sp.SpectrumList()
-    for item in spec_list:
-        new_spec_list.append(
-            extract_region(item,spectral_region)
+    new_spectrum_list = sp.SpectrumList()
+    for item in spectrum_list:
+        new_spectrum_list.append(
+            extract_region_in_spectrum(item,spectral_region)
             )
-    return new_spec_list
-
-
-#%% add_spam_wcs
-# @disable_func
-def add_spam_wcs(naxis:int=1):
-    """
-    Convenience function that returns SPAM wcs depending on the number of axis
-
-    Parameters
-    ----------
-    naxis : int, optional
-        What is the shape of the spectrum. The default is 1.
-
-    Returns
-    -------
-    None.
-
-    """
-    wcs = WCS(naxis=naxis,fix=False)
-    wcs.wcs.ctype = ['SPAM']*naxis
-    return wcs
-
+    return new_spectrum_list
 
 #%% extract_sgl_order
 def extract_sgl_order(spec_coll,order):
@@ -316,25 +301,10 @@ def extract_dbl_order(spec_coll_list,orders):
         for order in orders:
             item.meta.update({'S_N':item.meta['S_N_all'][order]})
             spec_list.append(item[order-1])
-        
-        
     return spec_list
-#%% update_sn
-def update_sn(spec_list,order):
-    """Updates the meta parameters for S_N to use in calculations
-    Input:
-        spec_list ; sp.SpectrumList - spec_list to update
-        order ; which order is the data composed of
-    Change:
-        sp.Spectrum1D.meta['S_N_all']
-    """
-    for item in spec_list:
-        item.meta.update({
-            'S_N':item.meta['S_N_all'][order]
-            })
-    return
+
 #%% determine_rest_frame
-def determine_rest_frame(spectrum):
+def determine_rest_frame(spectrum: sp.Spectrum1D | sp.SpectrumCollection):
     """
     Determine rest frame for given rest frame based on the velocities corrected
     Input:
@@ -358,44 +328,21 @@ def determine_rest_frame(spectrum):
     elif test_meta == [False,False,False,True] or test_meta == [False,True,False,True]:
         spectrum.meta['RF'] = 'Planet'
     else:
-        print('Rest Frame not found')
+        logger.warning('Automatic rest frame finding routine failed.')
+        logger.warning('    RF keyword changed to "undefined"')
+        spectrum.meta['RF'] = 'undefined'
     return
 
 #%% print_info
-def print_info(spec_list):
-    """
-    Prints numbering info for each spectrum in spec_list
-    """
-    for item in spec_list:
+def print_info(spectrum_list):
+    # DOCUMENTME
+    # CLEANME
+    for item in spectrum_list:
         print('Night:',item.meta['Night'],
               '#Night',item.meta['Night_num'],
               'Num_spec_night',item.meta['Night_spec_num'],
               'Num_spec',item.meta['spec_num'])
 
-#%% phase_fold
-def phase_fold(date,sys_para):
-    """
-    Phase fold the BJD date based on sys_para
-
-    Parameters
-    ----------
-    date : float*u.day
-        Day of observation in BJD.
-    sys_para : system_parameters_class
-        System parameters of current system.
-
-    Returns
-    -------
-    phase : float, range[-0.5;0.5]
-        Phase of the given time in the transit. 0 is mid transit
-
-    """
-    period = sys_para.planet.P
-    transit_center = sys_para.transit.T_C
-    phase = (((date - transit_center)/period))%1
-    if phase >0.5:
-        phase= phase-1
-    return phase 
 #%% tie_wlg
 def tie_wlg(model):
     """
@@ -405,66 +352,67 @@ def tie_wlg(model):
     Output:
         model tied together
     """
+    # TODO Move to spectra_manipulation_routines.models
     return model.mean_0 + (5895.924-5889.950)
-#%% save_object
-def save_object(object_data,name_of_file):
-    """ 
-    Saves a object into a file to be read
-    Input:
-        object_data = variable to save
-        name_of_file = name of file to save
-    """
-    with open(name_of_file, 'wb') as output:  # Overwrites any existing file.
-        pickle.dump(object_data, output, pickle.HIGHEST_PROTOCOL)
-#%% load_object
-def load_object(name_of_file):
-    """
-    Load a pickle object from file
-    Input:
-        name_of_file = filename to load
-    Output:
-        object_data = loaded variable
-    """
-    with open(name_of_file, 'rb') as input_file:
-        object_data = pickle.load(input_file)
-    return object_data
+
 #%% get_sublist
-def get_sublist(spec_list,key,value,mode='normal'):
+def get_sublist(spectrum_list: sp.SpectrumList,
+                key: str,
+                value: Any,
+                mode: str ='normal'
+                ) -> sp.SpectrumList:
     """
-    Returns a sublist with given item.meta[key] == value
-    Input:
-        spec_list ; sp.SpectrumList
-        key ; string of the meta keyword
-        value ; what value should be in sublist (eg. Transit == True)
-        mode = 'normal' or 'equal'; Whether condition is ==, 
-            or < ('less'),
-            or > ('more'),
-            or != ('non-equal')
-    Output:
-        new_spec_list ; sp.SpectrumList sublist of spec_list
+    Returns a filtered sublist. Depending on the mode, it will return spectra with:
+        mode= 'normal' (or 'equal'):
+            spectrum.meta[key] == value
+        mode= 'less':
+            spectrum.meta[key] < value
+        mode= 'more':
+            spectrum.meta[key] > value
+        mode= 'non-equal'
+            spectrum.meta[key] != value
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to filter through
+    key : str
+        Key of the meta parameter to filter with.
+    value : Any
+        Which value to filter by in the spectrum.meta[key]
+    mode : str, optional
+        Mode of the condition filter, by default 'normal'. Options are 'normal', 'less', 'more', 'non-equal'
+
+    Returns
+    -------
+    new_spectrum_list : sp.SpectrumList
+        Filtered spectrum list.
     """
-    new_spec_list = spec_list.copy()
+    # CLEANME
+    
+    new_spectrum_list = spectrum_list.copy()
+    
     # For single value extraction
     if (mode == 'normal') or (mode == 'equal'):
-        for item in spec_list:
+        for item in spectrum_list:
             if item.meta[key] != value:
-                new_spec_list.remove(item)
+                new_spectrum_list.remove(item)
     # For values smaller than value
     elif mode == 'less':
-        for item in spec_list:
+        for item in spectrum_list:
             if item.meta[key] > value:
-                new_spec_list.remove(item)
+                new_spectrum_list.remove(item)
     # For values higher than value
     elif mode == 'more':
-        for item in spec_list:
+        for item in spectrum_list:
             if item.meta[key] < value:
-                new_spec_list.remove(item)
+                new_spectrum_list.remove(item)
     # For values that are non-equal to value
     elif mode == 'non-equal':
-        for item in spec_list:
+        for item in spectrum_list:
             if item.meta[key] == value:
-                new_spec_list.remove(item)
-    return new_spec_list
+                new_spectrum_list.remove(item)
+    return new_spectrum_list
 #%% prepare_const_spec
 def prepare_const_spec(spec,num,unit=u.dimensionless_unscaled):
     """
@@ -485,31 +433,14 @@ def prepare_const_spec(spec,num,unit=u.dimensionless_unscaled):
         Output constant spectrum.
 
     """
+    # CLEANME
+    # TODO Check this is necessary anyway
     con_spec = sp.Spectrum1D(spectral_axis = spec.spectral_axis,
                              flux =[num]*len(spec.spectral_axis)*unit,
-                             wcs = add_spam_wcs(),
                              )
     return con_spec
 
-#%% error_bin
-def error_bin(array):
-    """
-    Calculates error in a bin based on np.sqrt(sum(error_in_bin))
-    Input:
-        array ; np.array of values to bin together
-    Output:
-        value ; resulting value
-    """
-    # Change list to array
-    if isinstance(array,list):
-        array = np.asarray(array)
-    # For arrays longer than 1 value
-    if len(array) != 1:
-        value = np.sqrt(np.sum(array**2)/(len(array))**2)
-    # Else nothing changes
-    else:
-        value = array[0]
-    return value
+
 #%% binning_spectrum
 def binning_spectrum(spectrum,bin_factor = 10):
     """
@@ -532,11 +463,14 @@ def binning_spectrum(spectrum,bin_factor = 10):
         y_err values of the binned spectrum.
 
     """
+    # CLEANME
+    # TESTME check this hasn't been changed
     num_bins = round(spectrum.spectral_axis.shape[0] / bin_factor)
     x = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.spectral_axis, statistic='mean', bins=num_bins)
     y = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.flux, statistic='mean', bins=num_bins)
-    y_err = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.uncertainty.array, statistic=error_bin, bins=num_bins)
+    y_err = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.uncertainty.array, statistic=smcalc._error_bin, bins=num_bins)
     return x.statistic,y.statistic,y_err.statistic
+
 #%% shift_spectrum
 def shift_spectrum(spectrum, 
                    velocities:list
@@ -557,6 +491,9 @@ def shift_spectrum(spectrum,
             meta - same meta as spectrum
             mask - new mask to ensure nans are included from extrapolation
     """
+    # CLEANME
+    # DOCUMENTME
+    
     term = 1 # Initiation of the term (1 since we are dividing/multiplying the term)
     for velocity in velocities: # To factor all velocities (replace with relativistic one?)
         term = term / (1+velocity.to(u.m/u.s)/con.c) # Divide as the velocities are in opposite sign
@@ -568,6 +505,7 @@ def shift_spectrum(spectrum,
     mask = mask_flux + mask_err # Gives zero values in each good pixel (values are False and False)
     mask = ~mask # Indices of good pixels (both flux and error)
     
+    # CLEANME
     change_value = np.where(mask[:-1] != mask[1:])[0]
     mask_region_list = []
     for ind,value in enumerate(change_value):
@@ -639,7 +577,8 @@ def interpolate2commonframe(spectrum,new_spectral_axis):
         Don't interpolate for same wavelength grid
 
     """
-    
+    # CLEANME
+    # DOCUMENTME
     # Mask handling
     mask_flux = ~np.isfinite(spectrum.flux) # Ensure nans are not included
     mask_err = ~np.isfinite(spectrum.uncertainty.array) # Sometimes y_err is NaN while flux isnt? Possible through some divide or np.sqrt(negative)
@@ -722,6 +661,7 @@ def binning_list(spec_list: sp.SpectrumList,
     num_cores = multiprocessing.cpu_count()
     new_spec_list = sp.SpectrumList(Parallel(n_jobs=num_cores)(delayed(interpolate2commonframe)(i,new_spectral_axis) for i in spec_list))
     return new_spec_list
+
 #%% normalize_spectrum
 def normalize_spectrum(spectrum,quantile=.85,linfit=False):
     """
@@ -755,19 +695,16 @@ def normalize_spectrum(spectrum,quantile=.85,linfit=False):
         tmp_spec = sp.Spectrum1D(
             spectral_axis = spectrum.spectral_axis,
             flux = (np.polyval(p,spectrum.spectral_axis.value))*pd.Series(spectrum.flux.value / np.polyval(p,spectrum.spectral_axis.value)).quantile(quantile)*spectrum.flux.unit,
-            wcs = add_spam_wcs()
             )
     elif (len(spectrum.flux) <10000) and linfit==False:
         tmp_spec = sp.Spectrum1D(
             spectral_axis = spectrum.spectral_axis,
             flux =np.full_like(spectrum.spectral_axis.value, pd.Series(spectrum.flux.value).fillna(999999).quantile(quantile))*spectrum.flux.unit,
-            wcs = add_spam_wcs()
             )
     else:
         tmp_spec = sp.Spectrum1D(spectral_axis = spectrum.spectral_axis,
                                  flux = np.array( pd.Series(spectrum.flux.value).rolling(7500
                                    ,min_periods=1,center=True).quantile(quantile))*spectrum.flux.unit,
-                                  wcs = add_spam_wcs()
                                   )
     
     normalization = spectrum.divide(tmp_spec,
@@ -782,7 +719,6 @@ def normalize_spectrum(spectrum,quantile=.85,linfit=False):
                              uncertainty = normalization.uncertainty,
                              mask = spectrum.mask.copy(),
                              meta = spectrum.meta.copy(),
-                             wcs = spectrum.wcs,
                               )
     normalized_spectrum.meta['normalization'] = True
     return normalized_spectrum
@@ -804,74 +740,8 @@ def normalize_list(spec_list,quantile=.85,linfit=False,force_load = False,force_
     new_spec_list = sp.SpectrumList(Parallel(n_jobs=num_cores)(delayed(normalize_spectrum)(i,quantile,linfit) for i in spec_list))
     return new_spec_list
 
-#%% get_spec_type
-def get_spec_type(key,value):
-    """
-    Supplementary function giving spec_type value for each key,value used
-    Used for labeling plots
-    Input:
-        key ; key of meta dictionary
-        value ; value of meta dictionary
-    Output:
-        spec_type ; Type of master spectrum (eg. 'out-of-Transit master')
-    """
-    # Type of master based on in/out of transit
-    if (key == 'Transit') or (key == 'Transit_full') or (key == 'Preingress') or (key == 'Postegress'):
-        if value == False:
-            spec_type = 'Out-of-transit'
-        else:
-            spec_type = 'In-transit (transmission)'
-            
-    # Type of master based on before/after telluric correction
-    if key == 'telluric_corrected':
-        if value == True:
-            spec_type = 'After-telluric-correction'
-        else:
-            spec_type = 'Before-telluric-correction'
-    # Set None master type (for debugging)
-    if key == None:
-        spec_type = 'None'
-    return spec_type
-#%% cosmic_correction_night
-def cosmic_correction_night(sublist):
-    """
-    Correction for cosmics in given night
 
-    Parameters
-    ----------
-    sublist : sp.SpectrumList
-        Sublist of given night to correct for.
 
-    Returns
-    -------
-    new_spec_list : sp.SpectrumList
-        Corrected spectrum sublist.
-
-    """
-    new_spec_list = sp.SpectrumList()
-    
-    flux_all = np.zeros((len(sublist),len(sublist[0].spectral_axis)))
-    for ind,item in enumerate(sublist):
-        flux_all[ind,:] = item.flux
-    median = np.median(flux_all,axis=0)
-    
-    for ii,item in enumerate(sublist):
-        ind = np.where((item.flux - median) > item.uncertainty.array * 5)
-        flux = item.flux
-        flux[ind] = median[ind]
-        
-        new_spec_list.append(
-            sp.Spectrum1D(
-                spectral_axis = item.spectral_axis ,
-                flux = flux * item.flux.unit,
-                uncertainty = item.uncertainty, # Seems like a weird step
-                mask =  item.mask.copy(),
-                meta = item.meta.copy(),
-                wcs = item.wcs,
-                )
-            )
-    
-    return new_spec_list
 #%% replace_flux_units_transmission
 @save_and_load
 def replace_flux_units_transmission(spec_list, unit,force_load = False, force_skip= False, pkl_name = ''):
@@ -900,7 +770,6 @@ def replace_flux_units_transmission(spec_list, unit,force_load = False, force_sk
             uncertainty = astropy.nddata.StdDevUncertainty(spectrum.uncertainty.array * unit),
             mask = spectrum.mask,
             meta = spectrum.meta,
-            wcs = add_spam_wcs(1),
             )
         new_spec_list.append(new_spectrum)
     
@@ -930,180 +799,73 @@ def cosmic_correction_all(spec_list,force_load=False,force_skip=False):
         # Getting night data
         sublist = get_sublist(spec_list,'Night_num',ni+1)
         # Calculating master_night
-        cosmic_corrected = cosmic_correction_night(sublist)
+        cosmic_corrected = smcalc.cosmic_correction_night(sublist)
         # Appending master_night
         new_spec_list.append(cosmic_corrected)
     new_spec_list = sum(new_spec_list,[])
     return new_spec_list
 
-#%% cosmic_correction # LEGACY
-@disable_func
-def cosmic_correction(spec_list):
-    """
-    TODO:
-        Redo for single night median
-    
-    Correction for cosmic rays based on 5 sigma median criterion
-    If flux_i - median_i > 5sigma => flux_i = median_i
-    where median_i = median spectrum of spec_list
-    Input:
-        spec_list ; sp.SpectrumList - list to correct, needs to be normalized and binned together
-    Output:
-        spec_list ; corrected spec_list
-    """
-    flux_all = np.zeros((len(spec_list),len(spec_list[0].spectral_axis)))
-    new_spec_list = deepcopy(spec_list)
-    for ind,item in enumerate(new_spec_list):
-        flux_all[ind,:] = item.flux
-    median = np.median(flux_all,axis=0)
-    
-    for ii,item in enumerate(new_spec_list):
-        ind = np.where((item.flux - median) > item.uncertainty.array * 5)
-        item.flux[ind] = median[ind]
-    return new_spec_list
 
-#%% get_master
-def get_master(spec_list,spec_type = '',night = '',num_night = '',rf = '',sn_type='quadratic'):
-    """
-    Calculates master spectrum of spectrum list
-    Input:
-        spec_list ; sp.SpectrumList
-        spec_type ; Type of resulting master spectrum (for automatic labels)
-        night ; number of night/ 'all' nights (for automatic labels)
-        rf ; rest frame of spectrum (for automatic labels)
-        sn_type ; type of weighting
-            possible options are:
-                'S_N' ; linear S_N weight
-                'quadratic' ; quadratic S_N weight
-                'quadratic_combined' ; quadratic S_N and light curve flux
-                'None' ; fill with 1
-    Output:
-        master ; sp.Spectrum1D - master spectrum
-    """
-    # Unit of flux
-    unit_flux = spec_list[0].flux.unit
-    # Allocate wavelength, flux and flux_err arrays
-    spectral_axis = spec_list[0].spectral_axis
-    flux = np.zeros(spec_list[0].spectral_axis.shape)
-    flux_err = np.zeros(spec_list[0].spectral_axis.shape)
-    # Allocate weighting
-    # Since some pixels might be masked, its necessary to weight by pixel
-    weights_total = np.zeros(spec_list[0].spectral_axis.shape)
-    
-    # For cycle through spec_list
-    for item in spec_list:
-        mask_flux = np.isnan(item.flux) # Masking NaNs
-        mask_err = np.isnan(item.uncertainty.array) # Masking NaNs
-        mask = mask_flux + mask_err # Getting combined mask (zero is for correct pixels)
-        mask != 0
-        # Taking flux and error from spectrum
-        tmp_flux = item.flux.value
-        tmp_err = item.uncertainty.array
-        # Assigning weights according to type of weighting
-        if sn_type == 'S_N':
-            weights = [item.meta['S_N']] * ~mask 
-        elif sn_type == 'quadratic':
-            weights = (np.asarray([item.meta['S_N']])**2) * ~mask
-        elif sn_type =='quadratic_error':
-            weights = ((np.asarray([item.meta['S_N']])**2*np.asarray([item.uncertainty.array])**2) * ~mask).flatten()
-        elif sn_type == 'quadratic_combined':
-            weights = (np.asarray([item.meta['S_N']])**2 +\
-                       np.asarray(item.meta['delta']**2)) * ~mask
-        elif sn_type == 'None':
-            weights = [1] * len(flux)
-        elif sn_type == 'quadratic_error':
-            weights = item.uncertainty.array**(-2) * ~mask
-        # Erasing NaN values with 0
-        tmp_flux = np.where(mask == False,tmp_flux,0)
-        tmp_err = np.where(mask == False,tmp_err,0)
-        weights = np.where(mask == False,weights,0)
-        # Suming flux, flux_err and weights for averaging
-        flux += tmp_flux * weights
-        flux_err += (tmp_err*weights)**2
-        weights_total += weights
-    # Averaging flux and flux_err
-    flux = flux / weights_total
-    flux_err = np.sqrt(flux_err) / weights_total
-    # Creation of master spectrum
-    master = sp.Spectrum1D(
-        flux = flux * unit_flux,
-        spectral_axis = spectral_axis,
-        uncertainty =  astropy.nddata.StdDevUncertainty(flux_err),
-        mask = np.isnan(flux),
-        wcs = add_spam_wcs(),
-        )
-    # Updating type of master
-    master.meta = {'type':spec_type,
-                   'night':night,
-                   'Night_num':num_night,
-                   'RF': rf
-        }
-    return master
 #%% calculate_master_list
 @progress_tracker
 @save_and_load
-def calculate_master_list(spec_list,
-                          key = None,
-                          value = None,
-                          sn_type='quadratic',
-                          force_load = False,
-                          force_skip = False,
-                          pkl_name = ''
-                          ):
-    """
-    Calculates master list
-    Input:
-        spec_list ; sp.SpectrumList
-        key = 'Transit' ; key of meta dictionary
-        value = False ; value for which master should calculated (eg. 'Transit'==False for out-of-Transit master)
-        sn_type = 'S_N' ; type of weighting, options are: ('None','S_N','quadratic','quadratic_combined')
-    Ouput:
-        master_list ; sp.SpectrumList with length num_nights+1
-    Error:
-        When spec_list is not normalized
-    """
+def calculate_master_list(spectrum_list: sp.SpectrumList,
+                          key: None | str = None,
+                          value: None | str = None,
+                          sn_type: None | str ='quadratic',
+                          force_load: bool = False,
+                          force_skip: bool = False,
+                          pkl_name: str = ''
+                          ) -> sp.SpectrumList:
+    # DOCUMENTME
+    # CLEANME
     # Warning for non-normalized spectra
-    if (spec_list[0].meta['normalization'] == False) & (key is not None):
-        message = 'Warning: Non-normalized spectra'
-        tc.cprint(message, 'grey','on_red')
+    if (spectrum_list[0].meta['normalization'] == False) & (key is not None):
+        logger.warning('The spectra are not normalized.')
+        logger.warning('    The master list will still be calculated.')
+    
     # Getting the right sublist based on type of master
     if key is None:
-        # All spectra together
-        sublist = spec_list.copy()
+        sublist = spectrum_list.copy()
     else:
-        # Specified sublist 
-        sublist = get_sublist(spec_list,key,value)
-        # Necessary for master_all
-        spec_list = sublist
-        
-        
-    # What type of master we have
-    spec_type = get_spec_type(key,value)
-    # Creating master_list
-    master_list = sp.SpectrumList()
-    # Number of nights
-    num_nights = sublist[-1].meta['Night_num']
+        sublist = get_sublist(spectrum_list,key,value)
+        spectrum_list = sublist
+    
+    assert (len(spectrum_list) != 0), 'The spectrum list is empty. Cannot calculate the master.' 
+    
+    spectrum_type = smcalc.get_spectrum_type(key= key,
+                                             value= value)
+    smcalc._check_night_ordering(spectrum_list)
+    number_of_nights = sublist[-1].meta['Night_num']
+
+    
+    # FIXME Should have a division on different instruments
+    
     # Master of nights combined
-    master_all = get_master(sublist,
-                            spec_type,
+    master_list = sp.SpectrumList()
+    master_all = smcalc.calculate_master_test(sublist,
+                            spectrum_type,
                             night='nights-combined',
-                            num_night = '"all"',
+                            num_night = '"combined"',
                             rf = sublist[0].meta['RF'],
                             sn_type=sn_type)
-    # Appending master_all to list
     master_list.append(master_all)
-    # For cycle through nights
-    for ni in range(num_nights):
+    
+    for ni in range(number_of_nights):
         # Getting night data
-        sublist = get_sublist(spec_list,'Night_num',ni+1)
-        # Calculating master_night
-        master_night = get_master(sublist,
-                                  spec_type,
-                                  night=sublist[0].meta['Night'],
-                                  num_night = str(ni+1),
-                                  rf = sublist[0].meta['RF'],
-                                  sn_type=sn_type)
-        # Appending master_night
+        sublist = get_sublist(spectrum_list,'Night_num',ni+1)
+        if len(sublist) == 0:
+            logger.warning(f'No spectra were found for given key/value selection for night {ni}. This night will be skipped and the resulting master list will not have a spectrum for this night.')
+            continue
+        
+        master_night = smcalc.calculate_master_test(
+            spectrum_list= sublist,
+            spectrum_type= spectrum_type,
+            night= sublist[0].meta['Night'],
+            num_night= str(ni+1),
+            rf= sublist[0].meta['RF'],
+            sn_type= sn_type
+            )
         master_list.append(master_night)
 
     return master_list
@@ -1512,7 +1274,7 @@ def extract_average_uncertainty_from_region(spec,line_list,diff_unc=1*u.AA):
     unc_list = []
     for line in line_list:
         spec_region = sp.SpectralRegion(line-diff_unc,line+diff_unc)
-        unc_list.append(np.nanmean(extract_region(spec,spec_region).uncertainty.array))
+        unc_list.append(np.nanmean(extract_region_in_spectrum(spec,spec_region).uncertainty.array))
     return unc_list
 #%% velocity_domain_sgl
 def velocity_domain_sgl(spectrum,line,constraint=[-100,100]*u.km/u.s):
@@ -1535,7 +1297,7 @@ def velocity_domain_sgl(spectrum,line,constraint=[-100,100]*u.km/u.s):
         wcs = add_spam_wcs(1)
         )
     spec_region = sp.SpectralRegion(constraint[0].to(u.m/u.s),constraint[1].to(u.m/u.s)) # Create subregion for the spectrum
-    velocity_spectrum = extract_region(new_spectrum,spec_region)
+    velocity_spectrum = extract_region_in_spectrum(new_spectrum,spec_region)
     return velocity_spectrum
 #%% velocity_fold
 def velocity_fold(spec_list,line_list,constraint=[-100,100]*u.km/u.s):
@@ -1620,7 +1382,7 @@ def RM_simulation(spec_list,master_RF_star_oot,sys_para):
             RM_simulated.append(shifted_to_RFP)
             
     # Calculate master in transit
-    In_transit = get_master(RM_simulated,sn_type = 'quadratic_combined')
+    In_transit = smcalc.calculate_master_test(RM_simulated,sn_type = 'quadratic_combined')
     return RM_simulated,In_transit
 
 #%% non_scaled2RpRssquare
@@ -1738,11 +1500,12 @@ def lost_planetary_signal(sr_region,spec_list):
     """
     Calculate fraction of lost (NaN) pixels in spectral region 
     """
+    # TODO - Rewrite
     num_pixels = 0
     num_pixels_lost = 0
 
     for item in spec_list:
-        region_spec = extract_region(item, sr_region)
+        region_spec = extract_region_in_spectrum(item, sr_region)
         try:
             num_pixels += len(region_spec.flux)
             num_pixels_lost += sum(np.isnan(region_spec.flux))
@@ -1753,145 +1516,3 @@ def lost_planetary_signal(sr_region,spec_list):
     print('Lost signal:',num_pixels_lost/num_pixels)
     
     return num_pixels_lost/num_pixels
-
-#%% calculate_mean_subsample
-def calculate_mean_subsample(full_1, full_2, partial_1, partial_2, out_1, out_2 ):
-    """
-    Calculates the mean of subsample distribution
-
-    Parameters
-    ----------
-    full_1 : sp.SpectrumList
-        Transiting spectra subsample (full transit).
-    full_2 : sp.SpectrumList
-        Transiting spectra subsample (full transit)..
-    partial_1 : sp.SpectrumList
-        Transiting spectra subsample (partial transit)..
-    partial_2 : sp.SpectrumList
-        Transiting spectra subsample (partial transit)..
-    out_1 : sp.SpectrumList
-        Out of transit spectra subsample.
-    out_2 : sp.SpectrumList
-        Out of transit spectra subsample.
-
-    Returns
-    -------
-    mean_flux_in_1 : float
-        Mean of full_1 sample.
-    mean_flux_in_2 : float
-        Mean of full_2 sample.
-    mean_flux_partial_1 : float
-        Mean of partial_1 sample.
-    mean_flux_partial_2 : float
-        Mean of partial_2 sample.
-    mean_flux_out_1 : float
-        Mean of out_1 sample.
-    mean_flux_out_2 : float
-        Mean of out_2 sample.
-
-    """
-    flux_in_1,flux_in_2, flux_partial_1, flux_partial_2, flux_out_1, flux_out_2 = [],[],[],[],[],[]
-    for item in full_1:
-        flux_in_1.append(item.flux.value)
-    for item in full_2:
-        flux_in_2.append(item.flux.value)
-    for item in partial_1:
-        flux_partial_1.append(item.flux.value)
-    for item in partial_2:
-        flux_partial_2.append(item.flux.value)
-    for item in out_1:
-        flux_out_1.append(item.flux.value)
-    for item in out_2:
-        flux_out_2.append(item.flux.value)
-    
-    mean_flux_in_1 = np.nanmean(np.asarray(flux_in_1))
-    mean_flux_in_2 = np.nanmean(np.asarray(flux_in_2))
-    mean_flux_partial_1 = np.nanmean(np.asarray(flux_partial_1))
-    mean_flux_partial_2 = np.nanmean(np.asarray(flux_partial_2))
-    mean_flux_out_1 = np.nanmean(np.asarray(flux_out_1))
-    mean_flux_out_2 = np.nanmean(np.asarray(flux_out_2))
-    
-    return mean_flux_in_1, mean_flux_in_2, mean_flux_partial_1, mean_flux_partial_2, mean_flux_out_1, mean_flux_out_2
-
-
-#%% extract_sample
-def extract_sample(data,size=500):
-    """
-    Extract subsample for each scenario with same size
-
-    Parameters
-    ----------
-    data : sp.SpectrumList
-        Data from which to draw subsample.
-    size : int, optional
-        Number of samples to draw. The default is 500.
-
-    Returns
-    -------
-    in_in : list
-        Distribution of mean fluxes for in-in scenario.
-    out_out : list
-        Distribution of mean fluxes for out-out scenario.
-    in_out : list
-        Distribution of mean fluxes for in-out scenario.
-
-    """
-    from sklearn.model_selection import train_test_split
-    
-    in_in,out_out,in_out = [],[],[]
-    
-    # Extract sublists
-    sublist_full = get_sublist(data,'Transit_full',True)
-    sublist_partial = get_sublist(data,'Transit',True)
-    sublist_out = get_sublist(data,'Transit',False)
-    
-    
-    for ii in range(size): # Drawing samples
-        print('Proceeding with sample %i'%ii,' out of %i'%size,' Progress: %i '%(ii/size),r'%')
-        full_1, full_2, partial_1, partial_2, out_1, out_2 = train_test_split(sublist_full, sublist_partial, sublist_out , test_size=0.5, shuffle=True)
-        
-        # Calculate mean fluxes for each spectrum
-        mean_flux_in_1, mean_flux_in_2, mean_flux_partial_1, mean_flux_partial_2, mean_flux_out_1, mean_flux_out_2 = calculate_mean_subsample(full_1, full_2, partial_1, partial_2, out_1, out_2 )
-        
-        # Save in list
-        in_in.append(mean_flux_in_1 / mean_flux_in_2) # In-in scenario
-        out_out.append(mean_flux_out_1 / mean_flux_out_2) # Out-out scenario
-        in_out.append(mean_flux_in_1 / mean_flux_out_1) # In-out scenario
-    
-    
-    return in_in, out_out, in_out
-
-
-#%% bootstrap_EMC
-def bootstrap_EMC(data_PRF,sp_region,size=500):
-    """
-    Run bootstrap EMC on the dataset. Will calculate three distributions based on in-in, out-out and in-out scenario. For each scenario, mean flux in spectral region is calculated
-
-    Parameters
-    ----------
-    data_PRF : sp.SpectrumList
-        List of spectra in planetary rest frame.
-    sp_region : sp.SpectralRegion
-        Spectral region where to extract the mean flux.
-    size : int
-        How many times to draw a scenario.
-
-    Returns
-    -------
-    distributions : list
-        List of distributions separated by night. Structure is: 'Night'; in_in, out_out, in_out distribution
-
-    """
-    num_nights = data_PRF[-1].meta['Night_num']
-    
-    data = extract_region_list(data_PRF,sp_region)
-    
-    distributions = []
-    
-    for ni in num_nights:
-        sublist = get_sublist(data,'Night_num',ni+1)
-        in_in, out_out, in_out = extract_sample(data,size=size)
-        distributions.append(['Night '+ sublist[0].meta['Night'],in_in, out_out, in_out])
-    return distributions
-
-

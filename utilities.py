@@ -293,7 +293,7 @@ def disable_func(func):
 #%% skip_function
 def skip_function(func):
     '''
-    This decorator disables a function based on a provided keyword. Use this to  of code by disabling for time saving.
+    This decorator disables a function based on a provided keyword. Use this to of code by disabling for time saving.
 
     Parameters
     ----------

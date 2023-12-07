@@ -21,6 +21,7 @@ import rats.plot_spectra as ps # Spectra plotting
 import rats.spectra_manipulation as sm # Spectra manipulation
 import rats.table as tab # Table creation
 import rats.plot_functions as pf # Plot functions
+from rats.utilities import default_logger_format
 # import rats.molecfit as mol # Molecfit loading functions
 import rats.spectra_ccf as ccf # CCF functions
 import rats.run_molecfit_all as mol # Functions to run molecfit
@@ -38,7 +39,7 @@ import astropy.io.fits as fits
 import numpy as np
 import os
 import logging
-
+#%% Setup logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 #%% Select type of plots (normal vs dark mode)
@@ -47,15 +48,16 @@ logger = default_logger_format(logger)
 force_load = False # True = Loads output of functions instead of Calculation
 force_skip = False # True = Skips running the function instead of loading/calculation
 #%% Setup of directories and movement of files from downloaded folder
-# TODO: Change the filepaths
+# FIXME: Change the filepaths
 data_directory = 'Add_directory_of_the_data_as_extracted_from_DACE'
 main_directory = 'Add_main_directory_of_the_project'
-
+save_directory = main_directory + '/saved_data'
 figure_directory = main_directory + '/figures'
 
 # For multiple instruments, need to define multiple directories
 #%% Movement of data to predefined directory tree
-# TODO: Run once, then comment/remove this cell
+# FIXME: Run once, then comment/remove this cell. 
+# If not commented, it will be ignored as long as the zip file downloaded from DACE has been extracted.
 su.setup_routine(original_directory= data_directory,
                  main_directory= main_directory,
                  file_types= ['S1D',
@@ -64,69 +66,28 @@ su.setup_routine(original_directory= data_directory,
                               ],
                  rerun= False
                  )
-#%% Change the working directory
-
 #%% Run molecfit all
 mol.run_molecfit_all(main_directory)
+#%% Change to working directory
 os.chdir(main_directory)
 #%% Loading parameters
-# TODO: Change the name of the system
-# TODO: Change the name of the system
-system_parameters = para.SystemParametersComposite()
-system_parameters.load_nasa_parameters('Name_of_the_planet_as_defined_by_NASA_archive',
-                              force_load=True
-                              )
+# FIXME: Change the name of the system
+system_parameters = para.SystemParametersComposite(
+    filename= save_directory + '/system_parameters.pkl'
+    )
+system_parameters.load_NASA_CompositeTable_values(
+    planet_name= 'Name_of_the_planet_as_defined_by_NASA_archive',
+    force_load=True
+    )
 #%% Check the original references!
-# TODO: Check that the system values are correct and correct those that are not manually
+# FIXME: Check that the system values are correct and correct those that are not manually
 #     Keep in mind, the code will run as long as you define the name of the planet above, 
 #     but it doesn't take necessarilly the best values for your system!
 # Use this as a first quick check only.
 # =============================================================================
-# Defining stellar parameters
-# =============================================================================
-# sys_para.star.radius = 0. * u.R_sun
-# sys_para.star.radiusherr = 0. * u.R_sun
-# sys_para.star.radiuslerr = 0. * u.R_sun
-# sys_para.star.radiusref = ''
-# sys_para.star.mass = 0. * u.M_sun
-# sys_para.star.massherr = 0. * u.M_sun
-# sys_para.star.masslerr = 0. * u.M_sun
-# sys_para.star.massref = ''
-
-# =============================================================================
-# Defining planetary parameters
-# =============================================================================
-# sys_para.planet.radius = 0 * u.R_jup
-# sys_para.planet.mass = 0. * u.M_jup
-
-# =============================================================================
-# Defining system parameters
-# =============================================================================
-# sys_para.system.a = 0. * u.au
-# sys_para.system.b = 0. 
-# sys_para.system.i = 0  * u.deg
-# sys_para.system.e = 0
-# sys_para.system.P = 0 * u.day
-# sys_para.system.omega = 0 * u.deg
-# sys_para.system.omega_bar = np.radians(sys_para.system.omega)
-# sys_para.system.vel_s = 0 * u.km / u.s 
-# sys_para.system.a_rs_ratio = 0
-# sys_para.system.rs_a_ratio = 1/0
-
-# =============================================================================
-# Defining transit parameters
-# =============================================================================
-# sys_para.transit.semiamp_s = 0 * u.m / u.s
-# sys_para.transit.T_C = 0 * u.day
-# sys_para.transit.delta = 0 *u.dimensionless_unscaled # Not in percentages, but raw number (opposed to NASA archive)
-# sys_para.update_contact_points()
-# sys_para.transit.T14 = 0 *u.hour
-# sys_para.transit.T23 = 0 *u.hour
-
-# =============================================================================
 # Print the system parameter values
 # =============================================================================
-system_parameters.print_values()
+system_parameters.print_main_values()
 # =============================================================================
 # Create system parameters table
 # This will print out latex code in the console to copy-paste into your papere
@@ -134,37 +95,20 @@ system_parameters.print_values()
 # sys_para.create_system_table()
 
 #%% Get equivalency and custom units for given system
-equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num = sm.custom_transmission_units(system_parameters)
-
-#%% Loading exoplanet table 
-# =============================================================================
-# Load the observed exoplanet class, calculate scale height for them
-# =============================================================================
-exo_class = para.observed_exoplanets()
-exo_class.calculate_scale_height()
-
-#%% Plotting exoplanet figure Mass vs Insolation flux
-# =============================================================================
-# Radius-insolation plot
-# =============================================================================
-# TODO: Change the handles of planets highlighted
-# TODO: Change the systems highlighted
-fig, ax = pf.radius_insolation_plot(
-    exo_class,
-    [['Enter_names_of_the_planets_to_highlight']],
-    [['Enter_labels_of_the_planets_to_highlight']],
-    )
+# FIXME 
+# equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num = sm.custom_transmission_units(system_parameters)
 
 #%% Loading data
-# TODO: Decide on S1D or S2D spectra
+# FIXME: Decide on S1D or S2D spectra
 # =============================================================================
 # S1D - simplest to use, by default
 # =============================================================================
-data_deblaze_s1d_A = eso.load_all(directory_spectra,
-                                  'Fiber_A',
-                                  'S1D_SKYSUB',
-                                  force_skip = force_skip
-                                  )
+data_raw_A = eso.load_all(main_directory= main_directory,
+                          spectra_format= 'S1D_SKYSUB',
+                          fiber= 'A',
+                          force_skip = force_skip
+                          )
+
 # data_deblaze_s1d_B = eso.load_all(directory_spectra,
 #                                   'Fiber_B',
 #                                   'S1D',
@@ -174,12 +118,12 @@ data_deblaze_s1d_A = eso.load_all(directory_spectra,
 # S2D - easiest to handle after order extraction, molecfit correction annoying
 # Good for single species check
 # =============================================================================
-# data_raw_s2d_A, data_deblaze_s2d_A = eso.load_all(directory_spectra, 'Fiber_A', 'S2D')
+# data_raw_A_test, data_raw_A_test = eso.load_all(directory_spectra, 'Fiber_A', 'S2D')
 # data_raw_s2d_B, data_deblaze_s2d_B = eso.load_all(directory_spectra, 'Fiber_B', 'S2D')
 # =============================================================================
 # Molecfit corrected spectra
 # =============================================================================
-# data_deblaze_s1d_A, telluric_profiles, data_uncorrected = mol.molecfit_new_output(
+# data_raw_A, telluric_profiles, data_uncorrected = mol.molecfit_new_output(
 #                         instrument_directory = directory_spectra,
 #                         spec_type='S1D')
 #%% Telluric quality control
@@ -187,14 +131,19 @@ data_deblaze_s1d_A = eso.load_all(directory_spectra,
 # Calculates master of uncorrected and telluric corrected spectra
 # Overplot it with telluric profile to check for potential spurious feature
 # =============================================================================
-
+template_list_petitradtrans = rats.modeling_CCF.create_all_available_templates(
+    SystemParameters= system_parameters,
+    spectral_axis= data_raw_A[0].spectral_axis,
+    MMW_value= 2.33,
+    force_load= False,
+    force_skip= False,
+    pkl_name= save_directory + 'petitRADtrans_templates.pkl'
+    )
 
 #%% Define phases, velocities and transit values
-# =============================================================================
-# TODO: Replace the S1D name with S2D if using it instead
-# =============================================================================
-of.update_phase_and_vel(data_deblaze_s1d_A,system_parameters)
-para.update_transit(data_deblaze_s1d_A,system_parameters)
+system_parameters.spectra_transit_flags(data_raw_A)
+system_parameters.calculate_velocities_list(data_raw_A)
+
 #%% Calculate master A and B spectrum
 # =============================================================================
 # Calculate master fiber A and B spectrum
@@ -375,3 +324,23 @@ ps.plot_transmission_spectrum(transmission_spectrum,
                               rats.lists.sodium_doublet,
                               )
 
+
+
+#%% Loading exoplanet table 
+# =============================================================================
+# Load the observed exoplanet class, calculate scale height for them
+# =============================================================================
+exo_class = para.observed_exoplanets()
+exo_class.calculate_scale_height()
+
+#%% Plotting exoplanet figure Mass vs Insolation flux
+# =============================================================================
+# Radius-insolation plot
+# =============================================================================
+# TODO: Change the handles of planets highlighted
+# TODO: Change the systems highlighted
+fig, ax = pf.radius_insolation_plot(
+    exo_class,
+    [['Enter_names_of_the_planets_to_highlight']],
+    [['Enter_labels_of_the_planets_to_highlight']],
+    )

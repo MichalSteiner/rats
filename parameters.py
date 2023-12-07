@@ -7,14 +7,16 @@ Created on Wed Jun 30 08:34:27 2021
 
 """
 #%% Importing libraries
-import rats.parameters_utilities as parautils
+import rats.parameters_subroutines.utilities as parautils
 import pyvo as vo
 from astropy.nddata import NDData, StdDevUncertainty, NDDataArray
 import astropy.time as astime
 import astropy.units as u
+import datetime
 import numpy as np
 import os
 import re
+import dill as pickle
 from html import unescape
 # import astropy.units as u
 from rats.utilities import default_logger_format
@@ -87,7 +89,7 @@ def _load_NASA_FullTable(planet_name: str | None = None) -> pd.DataFrame:
         FullTable = pd.DataFrame(service.search("SELECT * FROM ps WHERE pl_name = %s"% planet_name))
     logger.info("Loading finished.")
     return FullTable
-#%% Convenience function to extract NDDataArray from Composite table
+#%% Convenience function to extract NDData from Composite table
 def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
                                     keyword: str,
                                     parameter_name: str) -> NDDataArray:
@@ -482,8 +484,6 @@ class _PlanetParameters(parautils.CalculationPlanet):
         self.density.unit = u.g / (u.cm**3)
         self.semimajor_axis = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbsmax', 'Planet semimajor-axis')
         self.semimajor_axis.unit = u.au
-        self.period = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbper', 'Planetary period')
-        self.period.unit = u.day
         self.impact_parameter = _load_array_from_CompositeTable(CompositeTableRow, 'pl_imppar', 'Planetary impact parameter')
         self.impact_parameter.unit = u.dimensionless_unscaled
         self.inclination = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbincl', 'Planet orbital inclination')
@@ -491,11 +491,11 @@ class _PlanetParameters(parautils.CalculationPlanet):
         self.eccentricity = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orbeccen', 'Planetary eccentricity')
         self.eccentricity.unit = u.dimensionless_unscaled
         self.argument_of_periastron = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orblper', 'Planetary argument of periastron')
-        self.argument_of_periastron = u.deg
+        self.argument_of_periastron.unit = u.deg
         self.a_rs_ratio = _load_array_from_CompositeTable(CompositeTableRow, 'pl_ratdor', 'Planet semimajor-axis to stellar radius ratio')
         self.a_rs_ratio.unit = u.dimensionless_unscaled
         self.keplerian_semiamplitude = _load_array_from_CompositeTable(CompositeTableRow, 'pl_rvamp', 'Keplerian semiamplitude')
-        self.keplerian_semiamplitude = u.m / u.s
+        self.keplerian_semiamplitude.unit = u.m / u.s
         self.insolation_flux = _load_array_from_CompositeTable(CompositeTableRow, 'pl_insol', 'Insolation flux')
         # TODO
         logger.warning('Add units for insolation flux')
@@ -523,10 +523,10 @@ class _PlanetParameters(parautils.CalculationPlanet):
         STANDARD_PLANET_LIST = [self.radius,
                                 self.mass,
                                 self.density,
+                                self.semimajor_axis,
                                 self.insolation_flux,
                                 self.equilibrium_temperature,
                                 self.eccentricity,
-                                self.period,
                                 self.projected_obliquity,
                                 self.true_obliquity]
         for array in STANDARD_PLANET_LIST:
@@ -583,8 +583,10 @@ class _EphemerisParameters():
         Transit center of the planetary transit, by default None.
     period : NDDataArray | None
         Orbital period of the planet, by default None.
-    transit_length : NDDataArray | None
-        Transit length of the planetary transit, by default None.
+    transit_length_partial : NDDataArray | None
+        Transit length of the planetary transit (including partial transit, defined by T1 and T4 contact points), by default None.
+    transit_length_full : NDDataArray | None
+        Transit length of the planetary transit (excluding partial transit, defined by T2 and T3 contact points), by default None.
     transit_depth : NDDataArray | None
         Transit depth of the planetary transit, by default None.
     occultation_depth : NDDataArray | None
@@ -595,7 +597,8 @@ class _EphemerisParameters():
     
     transit_center: NDDataArray | None = None
     period: NDDataArray | None = None
-    transit_length: NDDataArray | None = None
+    transit_length_partial: NDDataArray | None = None
+    transit_length_full: NDDataArray | None = None
     transit_depth: NDDataArray | None = None
     occultation_depth: NDDataArray | None = None
     ttv_flag: bool = False
@@ -670,30 +673,37 @@ class _EphemerisParameters():
             keyword = 'pl_tranmid',
             parameter_name= 'Transit center'
             )
+        self.transit_center.unit = u.day
         self.period = self._try_load_single_value_fromFullTable(
             FullTableRow = FullTablePlanetRow,
             CompositeTableRow= CompositeTableRow,
             keyword = 'pl_orbper',
             parameter_name= 'Planetary period'
             )
-        self.transit_length = self._try_load_single_value_fromFullTable(
+        self.period.unit = u.day
+        self.transit_length_partial = self._try_load_single_value_fromFullTable(
             FullTableRow = FullTablePlanetRow,
             CompositeTableRow= CompositeTableRow,
             keyword = 'pl_trandur',
-            parameter_name= 'Transit length'
+            parameter_name= 'Transit length (partial, T14)'
             )
+        self.transit_length_partial.unit = u.hour
         self.transit_depth = self._try_load_single_value_fromFullTable(
             FullTableRow = FullTablePlanetRow,
             CompositeTableRow= CompositeTableRow,
             keyword = 'pl_trandep',
             parameter_name= 'Transit depth'
             )
+        self.transit_depth.unit = u.Unit(0.01) # Percentage
+        self.transit_depth = self.transit_depth.convert_unit_to(u.dimensionless_unscaled)
         self.occultation_depth = self._try_load_single_value_fromFullTable(
             FullTableRow = FullTablePlanetRow,
             CompositeTableRow= CompositeTableRow,
             keyword = 'pl_occdep',
             parameter_name= 'Occultation depth'
             )
+        self.occultation_depth.unit = u.Unit(0.01) # Percentage
+        self.occultation_depth = self.occultation_depth.convert_unit_to(u.dimensionless_unscaled)
         self.ttv_flag = self._try_load_single_value_fromFullTable(
             FullTableRow = FullTablePlanetRow,
             CompositeTableRow= CompositeTableRow,
@@ -711,7 +721,7 @@ class _EphemerisParameters():
         
         STANDARD_EPHEMERIS_LIST = [self.transit_center,
                                    self.period,
-                                   self.transit_length,
+                                   self.transit_length_partial,
                                    self.transit_depth]
         for array in STANDARD_EPHEMERIS_LIST:
             _print_NDDataArray(array)
@@ -728,9 +738,12 @@ class SystemParameters():
     pass
 #%% System parameters Composite class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
-class SystemParametersComposite():
+class SystemParametersComposite(parautils.CalculationTransitLength,
+                                parautils.CalculationSystem,
+                                # parautils.EquivalenciesTransmission,
+                                ):
     """
-    Ephemeris parameters class.
+    Ephemeris parameters class. Inherits multiple calculations methods through parautils.CalculationTransitLenght, parautils.CalculationSystem classes.
     
     Attributes
     ----------
@@ -740,19 +753,38 @@ class SystemParametersComposite():
         Planet parameters saved as a _PlanetParameters class
     Ephemeris : _EphemerisParameters
         Ephemeris parameters saved as a _EphemerisParametes class
+    filename : str
+        Filename where to save the class data (to avoid rerunning the TAP query). By default, this class is saved in "/saved_data/system_parameters.pkl".
     """
     Star: _StellarParameters = _StellarParameters()
     Planet: _PlanetParameters = _PlanetParameters()
     Ephemeris: _EphemerisParameters = _EphemerisParameters()
+    filename: str = 'system_parameters.pkl'
     
     def _save(self):
-        # TODO
-        return
+        """
+        Save the class values in given filename.
+        """
+        with open(self.filename, 'wb') as output_file:
+            self.time = datetime.datetime.now()
+            pickle.dump(self.__dict__, output_file)
+            logger.info('Saved system parameters in file:')
+            logger.info(f'    {self.filename}')
+    
     def _load(self):
-        return
+        """
+        Load the class values from given filename.
+        """
+        with open(self.filename, 'rb') as input_file:
+            # FIXME
+            self.__dict__  =  pickle.load(input_file)
+            logger.info('Loaded system parameters from file:')
+            logger.info(f'    {self.filename}')
+            
     
     def load_NASA_CompositeTable_values(self,
-                                        planet_name: str):
+                                        planet_name: str,
+                                        force_load: bool = False):
         """
         Loads values from NASA Composite table. For Ephemeris attribute, full table is used.
 
@@ -760,7 +792,18 @@ class SystemParametersComposite():
         ----------
         planet_name : str
             Planet name as defined by NASA archive.
+        force_load : bool
+            Whether to force reload through the TAP query. By default, is False, which means no reload is forced.
         """
+        # Try to load if not forced and filename exist.
+        if (not(force_load) and
+            os.path.isfile(self.filename)):
+            self._load()
+            # If last TAP query happened more than week ago, will rerun again.
+            if ((datetime.datetime.now() - self.time).days < 7):
+                logger.info('SystemParametersComposite class loaded successfully.')
+                return
+        
         CompositeTableRow = _load_NASA_CompositeTable(system_name = None,
                                                       planet_name = planet_name).iloc[0]
         FullTablePlanet = _load_NASA_FullTable(planet_name = planet_name)
@@ -790,6 +833,27 @@ class SystemParametersComposite():
                                                        CompositeTableRow= CompositeTableRow)
 
             self.Ephemeris.print_values()
+            
+        self._update_contact_points(
+            force_recalculate= False
+            )
+        self._calculate_all_values()
+        
+        self._save()
+        return
+    
+    def _calculate_all_values(self):
+        """
+        Calculate all possible values for the system. Launched automatically after loading the NASA archive.
+        """
+        # FIXME Calculate missing values after loading
+        self._calculate_gravity_acceleration()
+        self._calculate_atmospheric_scale_height()
+        self._update_contact_points()
+        self._calculate_contact_points()
+        # self._custom_transmission_units()
+        
+        
         return
     
     def print_main_values(self):
@@ -809,8 +873,6 @@ class SystemParametersComposite():
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class SystemParametersFull():
     # TODO
-    
-    
     def load_NASA_FullTable_values(self):
         # TODO
         return
@@ -876,6 +938,11 @@ class EphemerisPlanet():
             else:
                 if lowest_uncertainty > self._calculate_uncertainty(Ephemeris, night):
                     BestEphemeris = Ephemeris
+        logger.info(f'Best ephemeris reference found: {BestEphemeris.reference}')
+        logger.info(f'    with uncertainty of {lowest_uncertainty.to(u.h)} [h]')
+        logger.info(f'    with uncertainty of {lowest_uncertainty.to(u.min)} [min]')
+        logger.info(f'    with uncertainty of {lowest_uncertainty.to(u.s)} [s]')
+        
         return BestEphemeris
 
     def _calculate_uncertainty(self,
@@ -934,15 +1001,26 @@ class FullTable():
 if __name__ == '__main__':
     
     logger.info('Testing setup for rats.parameters module')
-    os.chdir('/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_TOI-132')
+    os.chdir('/media/chamaeleontis/Observatory_main/Analysis_dataset/rats_test')
+    
     system_name = 'TOI-132'
     planet_name = 'TOI-132 b'
     
     logger.info('Loading system parameters for system: ' + system_name)
-    TOI132 = SystemParametersComposite()
-    TOI132.load_NASA_CompositeTable_values(planet_name = 'TOI-132 b')
+    TOI132 = SystemParametersComposite(
+        filename= os.getcwd() + '/saved_data/system_parameters.pkl'
+        )
+    TOI132.load_NASA_CompositeTable_values(planet_name = 'TOI-132 b',
+                                           force_load=True
+                                           )
+    TOI132.Planet._calculate_gravity_acceleration()
+    TOI132._update_contact_points(
+        force_recalculate= True
+    )
     TOI132.print_main_values()
-    
+    TOI132.Planet._calculate_atmospheric_scale_height()
+
+    TOI132._phase_fold(bjd= 2600000)
     
     # CompositeTableAll = _load_NASA_CompositeTable(system_name = None)
     # FullTableTOI132 = _load_NASA_FullTable(planet_name = planet_name)
