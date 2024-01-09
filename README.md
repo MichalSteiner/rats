@@ -1,7 +1,8 @@
 # RATS - Analysis of Transmission Spectra
  - Usage:
-    - `Template_transmission_spectroscopy.py` shows a typical pipeline to reduce `HARPS` and `ESPRESSO` data of transit.
+    - `Template_transmission_spectroscopy.py` shows a typical pipeline to reduce `HARPS` and `ESPRESSO` data of a transit.
     - 
+
 ## petitRADTrans
  - Before use:
     - Few adjustment for pathing needs to be done for `petitRADtrans` to be usable

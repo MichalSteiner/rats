@@ -125,7 +125,7 @@ def load_S1D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
     spectrum = sp.Spectrum1D(
         spectral_axis= wavelength,
         flux= flux,
-        uncertainty= astropy.nddata.StdDevUncertainty(error),
+        uncertainty= astropy.nddata.StdDevUncertainty(error, copy=True),
         mask = _mask_flux_array(flux),
         meta = meta,
         )
@@ -171,7 +171,7 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     spectrum = sp.SpectrumCollection(
         flux = flux * u.ct,
         spectral_axis = wavelength_air * u.AA,
-        uncertainty = astropy.nddata.StdDevUncertainty(flux_err),
+        uncertainty = astropy.nddata.StdDevUncertainty(flux_err, copy= True),
         meta = meta,
         mask = _mask_flux_array(flux)
         )

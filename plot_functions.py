@@ -19,7 +19,6 @@ import astropy.units as u
 from matplotlib.lines import Line2D
 import matplotlib.patches as  mpatches
 import os
-import mpld3
 from scipy.stats import gaussian_kde
 #%% Color_pallete
 color_pallete_dark = sns.color_palette("dark")

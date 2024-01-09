@@ -3,6 +3,7 @@ from rats.utilities import default_logger_format
 from astropy.nddata import NDDataArray, StdDevUncertainty
 import astropy.units as u
 from uncertainties import ufloat
+import numpy as np
 
 #%% Setting up logging
 logger = logging.getLogger(__name__)
@@ -76,6 +77,10 @@ def _round_to_precision(array: NDDataArray) -> NDDataArray:
     """
     value = array.data
     uncertainty = array.uncertainty.array
+    
+    if np.isnan(value) or np.isnan(uncertainty): 
+        logger.debug('Rounding to precision failed due to NaN values.')
+        return array
     
     logger.debug('Rounding values to two non-zero digits:')
     logger.debug('Original values:')

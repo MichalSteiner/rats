@@ -1,0 +1,17 @@
+astropy
+specutils
+pyvo
+numpy
+scipy
+matplotlib
+pysme-astro
+dill
+uncertainties
+seaborn
+pathos
+requests
+logging
+os
+petitRADTRANS
+re
+pandas

@@ -349,7 +349,7 @@ class CalculationTransitLength:
         # CLEANME Cleanup if possible
         # TODO move to Ephemeris class
         
-        if self.Ephemeris.transit_length_partial is None or force_recalculate:
+        if self.Ephemeris.transit_length_partial is None or force_recalculate or np.isnan(self.Ephemeris.transit_length_partial.data):
             # Equation 14 in Winn (2014)
             amplitude = self.Ephemeris.period.divide((np.pi * u.rad)) # P/ pi
             scale = self.Star.radius.divide(self.Planet.semimajor_axis) # R_star / a
@@ -403,7 +403,7 @@ class CalculationTransitLength:
             logger.info(f'recalculated based on: {self.Ephemeris.transit_length_partial.meta["formula"]}')
             
 
-        if self.Ephemeris.transit_length_full is None or force_recalculate:
+        if self.Ephemeris.transit_length_full is None or force_recalculate or np.isnan(self.Ephemeris.transit_length_full.data):
             amplitude = self.Ephemeris.period.divide((np.pi * u.rad)) # P/ pi
             scale = self.Star.radius.divide(self.Planet.semimajor_axis) # R_star / a
             one = NDDataArray(1, unit=u.dimensionless_unscaled)

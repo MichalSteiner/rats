@@ -22,10 +22,10 @@ import specutils.fitting as fitting
 import scipy as sci
 import pandas as pd
 import multiprocessing
-from joblib.externals.loky import set_loky_pickler
-from joblib import parallel_backend
-from joblib import Parallel, delayed
-from joblib import wrap_non_picklable_objects
+# from joblib.externals.loky import set_loky_pickler
+# from joblib import parallel_backend
+# from joblib import Parallel, delayed
+# from joblib import wrap_non_picklable_objects
 import sys
 import time
 import traceback
@@ -37,8 +37,9 @@ import logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 #%% Default pickler
-set_loky_pickler('dill')
-
+# set_loky_pickler('dill')
+# NUM_CORES = multiprocessing.cpu_count()
+#%% Masking non-photon noise dominated pixels
 def mask_non_photon_noise_dominated_pixels_in_list(spectrum_list: sp.SpectrumList,
                                                    threshold: float= 0.5) -> sp.SpectrumList:
     """
@@ -568,8 +569,8 @@ def interpolate2commonframe(spectrum,new_spectral_axis):
         Spectral axis to intepolate the spectrum to
 
     Returns
-    -------
-    new_spectrum : sp.Spectrum1D
+    -------D
+    new_spectrum : sp.Spectrum1
         New spectrum interpolated to given spectral_axis
         
     TODO:
@@ -580,24 +581,11 @@ def interpolate2commonframe(spectrum,new_spectral_axis):
     # CLEANME
     # DOCUMENTME
     # Mask handling
+    
     mask_flux = ~np.isfinite(spectrum.flux) # Ensure nans are not included
     mask_err = ~np.isfinite(spectrum.uncertainty.array) # Sometimes y_err is NaN while flux isnt? Possible through some divide or np.sqrt(negative)
     mask = mask_flux + mask_err # Gives zero values in each good pixel (values are False and False)
     mask = ~mask # Indices of good pixels (both flux and error)
-        
-    change_value = np.where(mask[:-1] != mask[1:])[0]
-    mask_region_list = []
-    for ind,value in enumerate(change_value):
-        if ind == len(change_value)-1:
-            break
-        next_value = change_value[ind+1]
-        if mask[value] and ~mask[value+1] and ~mask[next_value] and mask[next_value+1]:
-            mask_region_list.append(sp.SpectralRegion(
-                np.nanmean([new_spectral_axis[value].value,new_spectral_axis[value+1].value])*new_spectral_axis.unit
-                ,
-                np.nanmean([new_spectral_axis[next_value].value,new_spectral_axis[next_value+1].value])*new_spectral_axis.unit
-                ))
-        pass
 
     # Interpolation function for flux - cubic spline with no extrapolation
     flux_int = sci.interpolate.CubicSpline(spectrum.spectral_axis[mask],
@@ -606,27 +594,27 @@ def interpolate2commonframe(spectrum,new_spectral_axis):
     # Interpolation function for uncertainty - cubic spline with no extrapolation
     
     # Calculated with square of uncertainty, than final uncertainty is np.sqrt()
-    err_int = sci.interpolate.CubicSpline(spectrum.spectral_axis[mask],
-                                           spectrum.uncertainty.array[mask]**2,
+    err_int = sci.interpolate.CubicSpline(spectral_axis[mask],
+                                           uncertainty[mask]**2,
                                            extrapolate= False)
     new_flux = flux_int(new_spectral_axis) # Interpolate on the old wave_grid
     import warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         new_uncertainty = np.sqrt(err_int(new_spectral_axis)) # Interpolate on the old wave_grid
+    
+    new_flux[~mask] = np.nan
+    new_uncertainty[~mask] = np.nan
+    
     new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty) # Interpolate on the old wave_grid
     new_spectrum = sp.Spectrum1D(
         spectral_axis = new_spectral_axis,
         flux = new_flux * spectrum.flux.unit,
         uncertainty = new_uncertainty,
         meta = spectrum.meta.copy(),
-        mask = np.isnan(new_flux),
+        mask = ~mask,
         wcs = spectrum.wcs,
         )
-    
-    if len(mask_region_list) !=0:
-        for region in mask_region_list:
-            new_spectrum = exciser_fill_with_nan(new_spectrum,region)
     
     
     return new_spectrum
@@ -635,8 +623,9 @@ def interpolate2commonframe(spectrum,new_spectral_axis):
 #%% binning_list
 @progress_tracker
 @skip_function
-def binning_list(spec_list: sp.SpectrumList,
-                 force_skip:bool =False,) -> sp.SpectrumList:
+def binning_list(spectrum_list: sp.SpectrumList,
+                 multiprocessing = True,
+                 force_skip:bool =False) -> sp.SpectrumList:
     """
     Reinterpolates the spectrum list to same wavelength grid.
 
@@ -654,13 +643,30 @@ def binning_list(spec_list: sp.SpectrumList,
 
     """
 
-    new_spec_list = sp.SpectrumList()
-    new_spectral_axis = spec_list[0].spectral_axis
-        
-    # Run for loop via multiprocessing
-    num_cores = multiprocessing.cpu_count()
-    new_spec_list = sp.SpectrumList(Parallel(n_jobs=num_cores)(delayed(interpolate2commonframe)(i,new_spectral_axis) for i in spec_list))
-    return new_spec_list
+    new_spectrum_list = sp.SpectrumList()
+    new_spectral_axis = spectrum_list[0].spectral_axis
+    
+    if multiprocessing:
+        # Run for loop via multiprocessing
+        from pathos.multiprocessing import Pool
+        from itertools import repeat
+        raise NotImplementedError
+        logger.warning('Starting multiprocessing')
+        with Pool() as p:
+            print(p.starmap(interpolate2commonframe,
+                        zip(spectrum_list, repeat(new_spectral_axis))
+                        )
+                  )
+        logger.warning('Finished multiprocessing')
+    else:
+        for spectrum in spectrum_list:
+            new_spectrum_list.append(
+                interpolate2commonframe(spectrum= spectrum,
+                                        new_spectral_axis= new_spectral_axis)
+            )
+            logger.debug(f'Interpolated spectrum number {spectrum.meta["spec_num"]} on common frame')
+            
+    return new_spectrum_list
 
 #%% normalize_spectrum
 def normalize_spectrum(spectrum,quantile=.85,linfit=False):
@@ -813,10 +819,40 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
                           key: None | str = None,
                           value: None | str = None,
                           sn_type: None | str ='quadratic',
+                          method: str = 'average',
                           force_load: bool = False,
                           force_skip: bool = False,
                           pkl_name: str = ''
                           ) -> sp.SpectrumList:
+    """
+    Calculates list of masters for the full dataset. The type of master is defined by key, value, sn_type and method used.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list including the full dataset for which to calculate masters
+    key : None | str, optional
+        Key which is used to define type of master, by default None
+    value : None | str, optional
+        Value which is used for filtering the spectrum_list, by default None
+    sn_type : None | str, optional
+        Type of weighting, by default 'quadratic'. Check rats.spectra_manipulation_subroutines.calculation._gain_weights() for more details.
+    method : str, optional
+        Method which to use to generate the master, by default 'average'
+    force_load : bool, optional
+        Force loading the result of this function, instead of recalculating it, by default False
+    force_skip : bool, optional
+        Force skipping this funciton, by default False
+    pkl_name : str, optional
+        Name of the pickle_file where to save the output, by default ''
+
+    Returns
+    -------
+    master_list : sp.SpectrumList
+        List of master spectra made for each night [ind == 1...n] and nights combined [ind == 0].
+    """
+    
+    
     # DOCUMENTME
     # CLEANME
     # Warning for non-normalized spectra
@@ -840,15 +876,17 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
 
     
     # FIXME Should have a division on different instruments
+    # IDEA: The master_all spectrum could have multiple spectra inside the spectrum1D/ spectrumCollection to include different instruments.
     
     # Master of nights combined
     master_list = sp.SpectrumList()
-    master_all = smcalc.calculate_master_test(sublist,
-                            spectrum_type,
+    master_all = smcalc._calculate_master(sublist,
+                            spectrum_type= spectrum_type,
                             night='nights-combined',
                             num_night = '"combined"',
                             rf = sublist[0].meta['RF'],
-                            sn_type=sn_type)
+                            sn_type=sn_type,
+                            method= method)
     master_list.append(master_all)
     
     for ni in range(number_of_nights):
@@ -858,13 +896,14 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
             logger.warning(f'No spectra were found for given key/value selection for night {ni}. This night will be skipped and the resulting master list will not have a spectrum for this night.')
             continue
         
-        master_night = smcalc.calculate_master_test(
+        master_night = smcalc._calculate_master(
             spectrum_list= sublist,
             spectrum_type= spectrum_type,
             night= sublist[0].meta['Night'],
             num_night= str(ni+1),
             rf= sublist[0].meta['RF'],
-            sn_type= sn_type
+            sn_type= sn_type,
+            method= method
             )
         master_list.append(master_night)
 
@@ -1382,7 +1421,7 @@ def RM_simulation(spec_list,master_RF_star_oot,sys_para):
             RM_simulated.append(shifted_to_RFP)
             
     # Calculate master in transit
-    In_transit = smcalc.calculate_master_test(RM_simulated,sn_type = 'quadratic_combined')
+    In_transit = smcalc._calculate_master(RM_simulated,sn_type = 'quadratic_combined')
     return RM_simulated,In_transit
 
 #%% non_scaled2RpRssquare

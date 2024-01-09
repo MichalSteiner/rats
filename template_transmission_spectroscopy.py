@@ -131,14 +131,14 @@ data_raw_A = eso.load_all(main_directory= main_directory,
 # Calculates master of uncorrected and telluric corrected spectra
 # Overplot it with telluric profile to check for potential spurious feature
 # =============================================================================
-template_list_petitradtrans = rats.modeling_CCF.create_all_available_templates(
-    SystemParameters= system_parameters,
-    spectral_axis= data_raw_A[0].spectral_axis,
-    MMW_value= 2.33,
-    force_load= False,
-    force_skip= False,
-    pkl_name= save_directory + 'petitRADtrans_templates.pkl'
-    )
+# template_list_petitradtrans = rats.modeling_CCF.create_all_available_templates(
+#     SystemParameters= system_parameters,
+#     spectral_axis= data_raw_A[0].spectral_axis,
+#     MMW_value= 2.33,
+#     force_load= False,
+#     force_skip= False,
+#     pkl_name= save_directory + 'petitRADtrans_templates.pkl'
+#     )
 
 #%% Define phases, velocities and transit values
 system_parameters.spectra_transit_flags(data_raw_A)
