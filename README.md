@@ -1,4 +1,4 @@
-# RATS - Analysis of Transmission Spectra
+# RATS - Revealing Atmospheres with Transmission Spectra
  - Usage:
     - `Template_transmission_spectroscopy.py` shows a typical pipeline to reduce `HARPS` and `ESPRESSO` data of a transit.
     - 
