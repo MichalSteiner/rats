@@ -37,6 +37,47 @@ from rats.utilities import time_function, save_and_load, progress_tracker, skip_
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
+def _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollection) -> sp.Spectrum1D | sp.SpectrumCollection:
+    """
+    Replace non-positive values in spectrum with NaNs.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Input spectrum
+
+    Returns
+    -------
+    sp.Spectrum1D | sp.SpectrumCollection
+        Output spectrum.
+    """
+    
+    
+    new_flux = np.where(spectrum.flux > 0, spectrum.flux, np.nan)
+    new_uncertainty = np.where(spectrum.flux > 0, spectrum.uncertainty.array, np.nan)
+    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty)
+    
+    match type(spectrum):
+        case sp.Spectrum1D:
+            new_spectrum = sp.Spectrum1D(
+                spectral_axis= spectrum.spectral_axis,
+                flux= new_flux * spectrum.flux.unit,
+                uncertainty= new_uncertainty,
+                meta= spectrum.meta.copy(),
+                mask = np.isnan(new_flux)
+            )
+        case sp.SpectrumCollection:
+            new_spectrum = sp.SpectrumCollection(
+                spectral_axis= spectrum.spectral_axis,
+                flux= new_flux * spectrum.flux.unit,
+                uncertainty= new_uncertainty,
+                meta= spectrum.meta.copy(),
+                mask = np.isnan(new_flux)
+            )
+        case _:
+            raise NotImplementedError('Requested format is not available')
+    return new_spectrum
+
 #%% Load spectrum
 def load_spectrum(filename: str) -> sp.Spectrum1D:
     """
@@ -75,6 +116,8 @@ def load_spectrum(filename: str) -> sp.Spectrum1D:
         spectrum = load_CCF_spectrum(fits_hdulist= fits_file)
     else:
         raise KeyError("Not a viable format of spectra.")
+    
+    spectrum = _replace_nonpositive_with_nan(spectrum)
     return spectrum
 
 #%% Load S1D spectrum
@@ -179,9 +222,10 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
 
 #%% Load CCF spectrum
 @todo_function
-def load_CCF_spectrum(fits_hdulist):
+def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList):
     #TODO Implement CCF
-    raise ValueError("Not implemented yet")
+    raise NotImplementedError("Not implemented yet")
+
     return
   
 #%% Load all spectra from project
@@ -365,7 +409,7 @@ class _SpectraFormat(Enum):
     S1D_SKYSUB = ['S1D', 'S1D_SKYSUB']
     S2D = ['S2D', 'raw']
     S2D_SKYSUB = ['S2D', 'S2D_SKYSUB']
-    S2D_BLAZE = ['S2D', 'BLAZE']
+    S2D_BLAZE = ['S2D', 'S2D_BLAZE']
     CCF = ['CCF', 'raw']
     CCF_SKYSUB = ['CCF', 'CCF_SKYSUB']
     

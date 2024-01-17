@@ -110,7 +110,8 @@ def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
     NDDataArray
         Array including the uncertainty (if defined for a key), and reference in meta dictionary (if defined). NDDataArray supports error propagation.
     """
-    if keyword + 'err1' in CompositeTableRow.keys():
+    if (keyword + 'err1' in CompositeTableRow.keys() and
+        keyword + '_reflink' in CompositeTableRow.keys()):
         logger.debug('Loading key:' + keyword)
         logger.debug('Value:' +  str(CompositeTableRow[keyword]))
         logger.debug('Lower error:' + str(CompositeTableRow[keyword + 'err1']))
@@ -124,6 +125,21 @@ def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
                         )
                 ),
             meta= {'reference': CompositeTableRow[keyword+'_reflink'],
+                   'parameter': parameter_name}
+            )
+    elif keyword + 'err1' in CompositeTableRow.keys():
+        logger.debug('Loading key:' + keyword)
+        logger.debug('Value:' +  str(CompositeTableRow[keyword]))
+        logger.debug('Lower error:' + str(CompositeTableRow[keyword + 'err1']))
+        logger.debug('Upper error:' + str(CompositeTableRow[keyword + 'err2']))
+        parameter = NDDataArray(
+            data= CompositeTableRow[keyword],
+            uncertainty= StdDevUncertainty(
+                np.max([CompositeTableRow[keyword + 'err1'],
+                        CompositeTableRow[keyword + 'err2']]
+                        )
+                ),
+            meta= {'reference': 'unknown',
                    'parameter': parameter_name}
             )
     elif keyword + '_reflink' in CompositeTableRow.keys():
@@ -541,7 +557,8 @@ class _PlanetParameters(parautils.CalculationPlanet):
 #%% System parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _SystemParameters():
-    #TODO
+    
+    # TODO
     
     systemic_velocity: NDData | None = None
     distance: NDData | None = None
@@ -567,9 +584,48 @@ class _SystemParameters():
     def create_latex_table(self):
         return
     
-    
-    
-    pass
+    def _load_values_from_composite_table(self,
+                                          CompositeTableRow: pd.DataFrame):
+        """
+        Load values from Composite table.
+
+        Parameters
+        ----------
+        CompositeTableRow : pd.DataFrame
+            Row for given system taken from NASA Composite table
+        """
+        
+        
+        self.systemic_velocity = _load_array_from_CompositeTable(CompositeTableRow, 'st_radv', 'Systemic velocity')
+        self.systemic_velocity.unit = u.km / u.s
+        self.distance = _load_array_from_CompositeTable(CompositeTableRow, 'sy_dist', 'Distance to the system')
+        self.distance.unit = u.pc
+        
+        self.number_of_stars = _load_array_from_CompositeTable(CompositeTableRow, 'sy_snum', 'Number of stars')
+        self.number_of_planets = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pnum', 'Number of planets')
+        self.number_of_moons = _load_array_from_CompositeTable(CompositeTableRow, 'sy_mnum', 'Number of moons')
+        
+        self.total_proper_motion = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pm', 'Total proper motion')
+        self.total_proper_motion.unit = u.mas / u.year
+        self.proper_motion_right_ascension = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pmra', 'Proper motion in right ascension')
+        self.proper_motion_right_ascension.unit =  u.mas / u.year
+        self.proper_motion_declination = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pmdec', 'Proper motion in declination')
+        self.proper_motion_declination.unit =  u.mas / u.year
+        self.parallax = _load_array_from_CompositeTable(CompositeTableRow, 'sy_plx', 'System paralax')
+        self.parallax.unit = u.mas
+        self.right_ascension = _load_array_from_CompositeTable(CompositeTableRow, 'ra', 'Right ascension')
+        self.declination = _load_array_from_CompositeTable(CompositeTableRow, 'dec', 'Declination')
+        
+        self.galactic_latitude = _load_array_from_CompositeTable(CompositeTableRow, 'glat', 'Galactic latitude')
+        self.galactic_latitude.unit = u.deg
+        self.galactic_longitude = _load_array_from_CompositeTable(CompositeTableRow, 'glon', 'Galactic longitude')
+        self.galactic_longitude.unit = u.deg
+        
+        self.ecliptic_latitude = _load_array_from_CompositeTable(CompositeTableRow, 'elat', 'Ecliptic latitude')
+        self.ecliptic_latitude.unit = u.deg
+        self.ecliptic_longitude = _load_array_from_CompositeTable(CompositeTableRow, 'elon', 'Ecliptic longitude')
+        self.ecliptic_longitude.unit = u.deg
+
 
 #%% Ephemeris parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
@@ -732,10 +788,6 @@ class _EphemerisParameters():
         # TODO
         return
 
-
-#%% System parameters class
-class SystemParameters():
-    pass
 #%% System parameters Composite class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class SystemParametersComposite(parautils.CalculationTransitLength,
@@ -753,12 +805,16 @@ class SystemParametersComposite(parautils.CalculationTransitLength,
         Planet parameters saved as a _PlanetParameters class
     Ephemeris : _EphemerisParameters
         Ephemeris parameters saved as a _EphemerisParametes class
+    System : _SystemParameters
+        System parameters saved as a _SystemParameters class
     filename : str
         Filename where to save the class data (to avoid rerunning the TAP query). By default, this class is saved in "/saved_data/system_parameters.pkl".
     """
     Star: _StellarParameters = _StellarParameters()
     Planet: _PlanetParameters = _PlanetParameters()
     Ephemeris: _EphemerisParameters = _EphemerisParameters()
+    System: _SystemParameters = _SystemParameters()
+    
     filename: str = 'system_parameters.pkl'
     
     def _save(self):
@@ -812,10 +868,12 @@ class SystemParametersComposite(parautils.CalculationTransitLength,
         
         self.Star._load_values_from_composite_table(CompositeTableRow= CompositeTableRow)
         self.Planet._load_values_from_composite_table(CompositeTableRow= CompositeTableRow)
-        
+        self.System._load_values_from_composite_table(CompositeTableRow= CompositeTableRow)
         self.EphemerisPlanet = EphemerisPlanet(planet_name= planet_name,
                                            FullTablePlanet= FullTablePlanet,
                                            CompositeTableRow= CompositeTableRow)
+        
+        
         
         logger.info('Calculated most precise ephemeris to current date.')
         self.Ephemeris = self.EphemerisPlanet.find_most_precise()

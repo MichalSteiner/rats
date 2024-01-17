@@ -206,7 +206,7 @@ class StellarModel:
             Affected spectrum, shifted by stellar local velocity.
 
         '''
-        spectrum_effect = sm.shift_spectrum(self.spectrum,
+        spectrum_effect = sm._shift_spectrum(self.spectrum,
                                              [cell['v_stel_loc']*u.km/u.s])
         
         return spectrum_effect
@@ -227,7 +227,7 @@ class StellarModel:
             print('row_ind:',col_ind)
             for row_ind in range(self.ncells): # Column indices
                 if self.grid[row_ind,col_ind]['instar']: # Is the cell inside the star?
-                    shifted_spectrum = sm.shift_spectrum(self.spectrum, [self.grid[row_ind,col_ind]['v_stel_loc']*u.km/u.s]) # Shift spectrum by local stellar velocity
+                    shifted_spectrum = sm._shift_spectrum(self.spectrum, [self.grid[row_ind,col_ind]['v_stel_loc']*u.km/u.s]) # Shift spectrum by local stellar velocity
                     for time_ind,occulted_time in enumerate(occulted_disk): # add the spectrum to all  
                         if occulted_time['inplan'][row_ind][col_ind]:
                             occulted_time['corrected_spectrum'] = occulted_time['corrected_spectrum'].add(shifted_spectrum)
@@ -499,7 +499,7 @@ for ind,phase in enumerate(new_test.occulted_disk['Phase']):
 shifted_spec_list = sp.SpectrumList()
 for item in spec_list:
     shifted_spec_list.append(
-        sm.shift_spectrum(item,
+        sm._shift_spectrum(item,
                          [-item.meta['vel_star'],item.meta['vel_planet']])
         )
 

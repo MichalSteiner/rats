@@ -286,7 +286,7 @@ def crosscorrelate(spec_list:sp.SpectrumList,
         print('Calculating crosscorrelation for velocity: ',velocity)
         print('Progress :',(ind*100/len(x_axis)),'%')
 
-        shifted_template = sm.shift_spectrum(template, velocities = [-velocity * u.km/u.s])
+        shifted_template = sm._shift_spectrum(template, velocities = [-velocity * u.km/u.s])
         for ii, spectrum in enumerate(spec_list):
             nan_ind = np.logical_and(np.isfinite(spectrum.flux),
                                      np.isfinite(spectrum.uncertainty.array)

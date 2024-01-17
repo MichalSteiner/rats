@@ -9,14 +9,18 @@ Created on Mon Sep  6 13:34:34 2021
 import specutils as sp
 import astropy
 import numpy as np
+from functools import singledispatch
 import rats.parameters as para
 import rats.spectra_manipulation_subroutines.calculation as smcalc
 import astropy.units as u
 from functools import singledispatch 
 import astropy.io.fits as fits
+from pathos.multiprocessing import Pool
+from itertools import repeat
 from copy import deepcopy
 import astropy.constants as con
 import pickle
+import warnings
 import math
 import specutils.fitting as fitting
 import scipy as sci
@@ -36,12 +40,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
-#%% Default pickler
-# set_loky_pickler('dill')
-# NUM_CORES = multiprocessing.cpu_count()
+
+
+
+#%% Masking values below a flux threshold
+def mask_flux_below_threshold_in_list(spectrum_list:sp.SpectrumList,
+                                      threshold: float = 100,
+                                      polynomial_order: int = 6,
+                                      execute: bool = True) -> sp.SpectrumList:
+    new_spectrum_list = sp.SpectrumList()
+    
+    for spectrum in spectrum_list:
+        new_spectrum_list.append(
+            smcalc._mask_flux_below_threshold(spectrum= spectrum,
+                                              threshold= threshold,
+                                              polynomial_order= polynomial_order)
+            )
+        print('Hello')
+    if execute:
+        new_spectrum_list = execute_mask_in_list(new_spectrum_list)
+    return
+
 #%% Masking non-photon noise dominated pixels
 def mask_non_photon_noise_dominated_pixels_in_list(spectrum_list: sp.SpectrumList,
-                                                   threshold: float= 0.5) -> sp.SpectrumList:
+                                                   threshold: float= 0.5,
+                                                   execute: bool = True) -> sp.SpectrumList:
     """
     Give a spectra list an updated mask to mask the non-photon noise dominated pixels.
 
@@ -51,6 +74,8 @@ def mask_non_photon_noise_dominated_pixels_in_list(spectrum_list: sp.SpectrumLis
         Spectra list for which to find the mask.
     threshold : float, optional
         Threshold by which to mask, by default 0.5. This masks pixels that have 50% structure of non-photon noise. The factor is a percentage of how much "domination" should the non-photon noise sources have. For example, to get a 10% mask (pixels with non-photon noise on the order of magnitude as the photon noise), threshold = 0.1.
+    execute : bool, optional
+        Whether to execute the mask, by default True. Otherwise the mask is only saved in the mask keyword
         
     Returns
     -------
@@ -64,6 +89,8 @@ def mask_non_photon_noise_dominated_pixels_in_list(spectrum_list: sp.SpectrumLis
             smcalc._mask_non_photon_noise_dominated_pixels_in_spectrum(spectrum= spectrum,
                                                                 threshold= threshold)
             )
+    if execute:
+        new_spectrum_list = execute_mask_in_list(new_spectrum_list)
     return new_spectrum_list
 
 #%% Execute masks in spectrum list
@@ -281,7 +308,6 @@ def extract_sgl_order(spec_coll,order):
     for item in spec_coll:
         item.meta.update({'S_N':item.meta['S_N_all'][order]})
         spec_list.append(item[order])
-        
     return spec_list
 
 #%% extract_dbl_order
@@ -305,7 +331,7 @@ def extract_dbl_order(spec_coll_list,orders):
     return spec_list
 
 #%% determine_rest_frame
-def determine_rest_frame(spectrum: sp.Spectrum1D | sp.SpectrumCollection):
+def _determine_rest_frame(spectrum: sp.Spectrum1D | sp.SpectrumCollection):
     """
     Determine rest frame for given rest frame based on the velocities corrected
     Input:
@@ -335,14 +361,24 @@ def determine_rest_frame(spectrum: sp.Spectrum1D | sp.SpectrumCollection):
     return
 
 #%% print_info
-def print_info(spectrum_list):
-    # DOCUMENTME
-    # CLEANME
+def print_info_spectrum_list(spectrum_list: sp.SpectrumList) -> None:
+    """
+    Print number indexes information about the spectra in the list.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list for which to print info.
+
+    Returns
+    -------
+    None
+    """
+    logger.print('='*30)
     for item in spectrum_list:
-        print('Night:',item.meta['Night'],
-              '#Night',item.meta['Night_num'],
-              'Num_spec_night',item.meta['Night_spec_num'],
-              'Num_spec',item.meta['spec_num'])
+        logger.print(f'Night: {item.meta["Night"]} | #Night: {item.meta["Night_num"]} | #Spectrum_in_night: {item.meta["Night_spec_num"]} | #Spectrum: {item.meta["Spec_num"]}')
+    logger.print('='*30)
+    return None
 
 #%% tie_wlg
 def tie_wlg(model):
@@ -443,7 +479,8 @@ def prepare_const_spec(spec,num,unit=u.dimensionless_unscaled):
 
 
 #%% binning_spectrum
-def binning_spectrum(spectrum,bin_factor = 10):
+def binning_spectrum(spectrum: sp.Spectrum1D,
+                     bin_factor: int = 10):
     """
     Bins a input spectrum by bin_factor*pixels
 
@@ -473,160 +510,247 @@ def binning_spectrum(spectrum,bin_factor = 10):
     return x.statistic,y.statistic,y_err.statistic
 
 #%% shift_spectrum
-def shift_spectrum(spectrum, 
-                   velocities:list
-                   ):
+def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection, 
+                    velocities: list
+                    ) -> sp.Spectrum1D | sp.SpectrumCollection:
     """
-    # TODO
-        Clean up the masking region handling
-    Shifts wavegrid of spectrum by velocities list. Returns new shifted spectrum that has same sp.Spectrum1D.spectral_axis, but flux interpolated from the shifted spectrum. Uncertainty are interpolated the same way, but as np.sqrt(Interpolate(uncertainty**2))
-    
-    Input:
-        spectrum ; sp.Spectrum1D - spectrum to shift
-        velocities ; list - list of velocities to shift by
-    Output:
-        new_spectrum ; sp.Spectrum1D - shifted spectrum, interpolated to same wavelength_grid
-            spectral_axis - same as spectrum
-            flux - interpolated from the shifted spectrum to same spectral_axis
-            uncertainty - interpolated as np.sqrt(Interpolate(uncertainty**2))
-            meta - same meta as spectrum
-            mask - new mask to ensure nans are included from extrapolation
+    Shifts spectrum by a list of velocities.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to shift. The output will be the same as input
+    velocities : list
+        Velocity list to shift by. Must be a list of astropy Quantities in the units of velocity.
+
+    Returns
+    -------
+    new_spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Shifted spectrum, interpolated to the old wavelength grid.
     """
-    # CLEANME
-    # DOCUMENTME
-    
     term = 1 # Initiation of the term (1 since we are dividing/multiplying the term)
     for velocity in velocities: # To factor all velocities (replace with relativistic one?)
         term = term / (1+velocity.to(u.m/u.s)/con.c) # Divide as the velocities are in opposite sign
     new_x_axis = spectrum.spectral_axis * term # Apply Doppler shift
     
     # Mask handling
-    mask_flux = ~np.isfinite(spectrum.flux) # Ensure nans are not included
-    mask_err = ~np.isfinite(spectrum.uncertainty.array) # Sometimes y_err is NaN while flux isnt? Possible through some divide or np.sqrt(negative)
-    mask = mask_flux + mask_err # Gives zero values in each good pixel (values are False and False)
-    mask = ~mask # Indices of good pixels (both flux and error)
-    
-    # CLEANME
-    change_value = np.where(mask[:-1] != mask[1:])[0]
-    mask_region_list = []
-    for ind,value in enumerate(change_value):
-        if ind == len(change_value)-1:
-            break
-        next_value = change_value[ind+1]
-        if mask[value] and ~mask[value+1] and ~mask[next_value] and mask[next_value+1]:
-            mask_region_list.append(sp.SpectralRegion(
-                np.nanmean([new_x_axis[value].value,new_x_axis[value+1].value])*new_x_axis.unit
-                ,
-                np.nanmean([new_x_axis[next_value].value,new_x_axis[next_value+1].value])*new_x_axis.unit
-                ))
-        pass
+    # Combine the mask arrays of flux and errors
+    mask_flux = ~np.isfinite(spectrum.flux)
+    mask_err = ~np.isfinite(spectrum.uncertainty.array)
+    mask = np.ma.mask_or(mask_flux, mask_err)
 
     # Interpolation function for flux - cubic spline with no extrapolation
-    flux_int = sci.interpolate.CubicSpline(new_x_axis[mask],
-                                           spectrum.flux[mask],
+    interpolate_flux = sci.interpolate.CubicSpline(new_x_axis[~mask],
+                                           spectrum.flux[~mask],
                                            extrapolate= False)
     # Interpolation function for uncertainty - cubic spline with no extrapolation
     
     # Calculated with square of uncertainty, than final uncertainty is np.sqrt()
-    err_int = sci.interpolate.CubicSpline(new_x_axis[mask],
-                                           spectrum.uncertainty.array[mask]**2,
+    interpolate_error = sci.interpolate.CubicSpline(new_x_axis[~mask],
+                                           spectrum.uncertainty.array[~mask]**2,
                                            extrapolate= False)
     # Applying interpolation functions to the old wave_grid
     # mask = ~mask # Indices of good pixels (both flux and error)
-    new_flux = flux_int(spectrum.spectral_axis) # Interpolate on the old wave_grid
+    new_flux = interpolate_flux(spectrum.spectral_axis) # Interpolate on the old wave_grid
+    
     import warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        new_uncertainty = np.sqrt(err_int(spectrum.spectral_axis)) # Interpolate on the old wave_grid
+        new_uncertainty = np.sqrt(interpolate_error(spectrum.spectral_axis)) # Interpolate on the old wave_grid
+        
+    # Masking values that were NaN
+    new_flux[mask] = np.nan
+    new_uncertainty[mask] = np.nan
+    
     new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty) # Interpolate on the old wave_grid
     
     # Create new spectrum
-    new_spectrum = sp.Spectrum1D(
-        spectral_axis = spectrum.spectral_axis,
-        flux = new_flux * spectrum.flux.unit,
-        uncertainty = new_uncertainty,
-        meta = spectrum.meta.copy(),
-        mask = np.isnan(new_flux),
-        wcs = spectrum.wcs,
-        )
-    if len(mask_region_list) !=0:
-        for region in mask_region_list:
-            new_spectrum = exciser_fill_with_nan(new_spectrum,region)
+    if type(spectrum) == sp.Spectrum1D:
+        new_spectrum = sp.Spectrum1D(
+            spectral_axis = spectrum.spectral_axis,
+            flux = new_flux * spectrum.flux.unit,
+            uncertainty = new_uncertainty,
+            meta = spectrum.meta.copy(),
+            mask = mask,
+            wcs = spectrum.wcs,
+            )
+    elif type(spectrum) == sp.SpectrumCollection:
+        logger.warning('Spectral Collection format has been untested, please verify')
+        new_spectrum = sp.SpectrumCollection(
+            spectral_axis = spectrum.spectral_axis,
+            flux = new_flux * spectrum.flux.unit,
+            uncertainty = new_uncertainty,
+            meta = spectrum.meta.copy(),
+            mask = mask,
+            wcs = spectrum.wcs,
+            )
+        logger.info('Finished correctly')
     
     return new_spectrum
 #%% interpolate2commonframe
-def interpolate2commonframe(spectrum,new_spectral_axis):
+@singledispatch
+def interpolate2commonframe(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                            new_spectral_axis: sp.spectra.spectral_axis.SpectralAxis) -> sp.Spectrum1D | sp.SpectrumCollection:
     """
-    # TODO
-        Clean up the masking region handling
-    Interpolate spectrum to new spectral axis
+    Interpolate spectrum to new spectral axis.
 
     Parameters
     ----------
-    spectrum : sp.Spectrum1D
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
         Spectrum to interpolate to new spectral axis
     new_spectral_axis : sp.Spectrum1D.spectral_axis 
         Spectral axis to intepolate the spectrum to
 
     Returns
-    -------D
-    new_spectrum : sp.Spectrum1
+    -------
+    new_spectrum : sp.Spectrum1D | sp.SpectrumCollection
         New spectrum interpolated to given spectral_axis
-        
-    TODO:
-        Check how does this function behaves with masks
-        Don't interpolate for same wavelength grid
-
     """
-    # CLEANME
-    # DOCUMENTME
-    # Mask handling
-    
-    mask_flux = ~np.isfinite(spectrum.flux) # Ensure nans are not included
-    mask_err = ~np.isfinite(spectrum.uncertainty.array) # Sometimes y_err is NaN while flux isnt? Possible through some divide or np.sqrt(negative)
-    mask = mask_flux + mask_err # Gives zero values in each good pixel (values are False and False)
-    mask = ~mask # Indices of good pixels (both flux and error)
+    logger.critical('Spectra format is invalid.')
+    raise ValueError('The spectrum format is invalid')
 
-    # Interpolation function for flux - cubic spline with no extrapolation
-    flux_int = sci.interpolate.CubicSpline(spectrum.spectral_axis[mask],
-                                           spectrum.flux[mask],
-                                           extrapolate= False)
-    # Interpolation function for uncertainty - cubic spline with no extrapolation
+@interpolate2commonframe.register(sp.Spectrum1D)
+def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D, 
+                               new_spectral_axis: sp.spectra.spectral_axis.SpectralAxis
+                               ) -> sp.Spectrum1D:
+    """
+    Interpolate spectrum to new spectral axis.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to interpolate to new spectral axis
+    new_spectral_axis : sp.Spectrum1D.spectral_axis 
+        Spectral axis to intepolate the spectrum to
+
+    Returns
+    -------
+    new_spectrum : sp.Spectrum1D
+        New spectrum interpolated to given spectral_axis
+    """
+    # Don't run when the spectrum already has the desired spectral axis.
+    if (spectrum.spectral_axis == new_spectral_axis).all(): 
+        logger.debug('Skipping interpolation as the desired spectral axis is the same as of the spectrum.')
+        return spectrum
     
-    # Calculated with square of uncertainty, than final uncertainty is np.sqrt()
-    err_int = sci.interpolate.CubicSpline(spectral_axis[mask],
-                                           uncertainty[mask]**2,
-                                           extrapolate= False)
-    new_flux = flux_int(new_spectral_axis) # Interpolate on the old wave_grid
-    import warnings
+    # Combine the mask arrays of flux and errors
+    mask_flux = ~np.isfinite(spectrum.flux)
+    mask_err = ~np.isfinite(spectrum.uncertainty.array)
+    mask = np.ma.mask_or(mask_flux, mask_err)
+    
+    flux_interpolate = sci.interpolate.CubicSpline(
+        spectrum.spectral_axis[~mask],
+        spectrum.flux[~mask],
+        extrapolate= False
+        )
+    # Error is interpolated as square, then taken a square-root from it
+    error_interpolate = sci.interpolate.CubicSpline(
+        spectrum.spectral_axis[~mask],
+        spectrum.uncertainty.array[~mask]**2,
+        extrapolate= False
+        )
+    
+    new_flux = flux_interpolate(new_spectral_axis) # Interpolate on the old wave_grid
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        new_uncertainty = np.sqrt(err_int(new_spectral_axis)) # Interpolate on the old wave_grid
+        new_uncertainty = np.sqrt(error_interpolate(new_spectral_axis)) # Interpolate on the old wave_grid
     
-    new_flux[~mask] = np.nan
-    new_uncertainty[~mask] = np.nan
+    # Masking values that were NaN
+    new_flux[mask] = np.nan
+    new_uncertainty[mask] = np.nan
+    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty)
     
-    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty) # Interpolate on the old wave_grid
     new_spectrum = sp.Spectrum1D(
         spectral_axis = new_spectral_axis,
         flux = new_flux * spectrum.flux.unit,
         uncertainty = new_uncertainty,
         meta = spectrum.meta.copy(),
-        mask = ~mask,
+        mask = mask,
         wcs = spectrum.wcs,
         )
-    
-    
     return new_spectrum
 
+@interpolate2commonframe.register(sp.SpectrumCollection)
+def _interpolate2commonframe_2D(spectrum: sp.SpectrumCollection, 
+                               new_spectral_axis: sp.spectra.spectral_axis.SpectralAxis
+                               ) -> sp.SpectrumCollection:
+    """
+    Interpolate spectrum to new spectral axis.
 
+    Parameters
+    ----------
+    spectrum : sp.SpectrumCollection
+        Spectrum to interpolate to new spectral axis
+    new_spectral_axis : sp.Spectrum1D.spectral_axis 
+        Spectral axis to intepolate the spectrum to
+
+    Returns
+    -------
+    new_spectrum : sp.SpectrumCollection
+        New spectrum interpolated to given spectral_axis
+    """
+    # Don't run when the spectrum already has the desired spectral axis.
+    if (spectrum.spectral_axis == new_spectral_axis).all(): 
+        logger.debug('Skipping interpolation as the desired spectral axis is the same as of the spectrum.')
+        return spectrum
+    
+    # Combine the mask arrays of flux and errors
+    mask_flux = ~np.isfinite(spectrum.flux)
+    mask_err = ~np.isfinite(spectrum.uncertainty.array)
+    mask = np.ma.mask_or(mask_flux, mask_err)
+    
+    order_list = sp.SpectrumList()
+    
+    ind = 0
+    for mask_order, order, new_spectral_axis_order in zip(
+        mask,
+        spectrum,
+        new_spectral_axis
+        ):
+        
+        flux_interpolate = sci.interpolate.CubicSpline(
+            order.spectral_axis[~mask_order],
+            order.flux[~mask_order],
+            extrapolate= False
+            )
+        # Error is interpolated as square, then taken a square-root from it
+        error_interpolate = sci.interpolate.CubicSpline(
+            order.spectral_axis[~mask_order],
+            order.uncertainty.array[~mask_order]**2,
+            extrapolate= False
+            )
+        ind += 1
+        new_flux_order = flux_interpolate(new_spectral_axis_order) # Interpolate on the old wave_grid
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            new_uncertainty_order = np.sqrt(error_interpolate(new_spectral_axis_order)) # Interpolate on the old wave_grid
+        
+        # Masking values that were NaN
+        new_flux_order[mask_order] = np.nan
+        new_uncertainty_order[mask_order] = np.nan
+        new_uncertainty_order = astropy.nddata.StdDevUncertainty(new_uncertainty_order)
+        
+        order_list.append(
+            sp.Spectrum1D(
+                spectral_axis = new_spectral_axis_order,
+                flux = new_flux_order * spectrum.flux.unit,
+                uncertainty = new_uncertainty_order,
+                meta = spectrum.meta.copy(),
+                mask = mask_order,
+                wcs = spectrum.wcs,
+                )
+            )
+    new_spectrum = sp.SpectrumCollection.from_spectra(order_list)
+    return new_spectrum
 #%% binning_list
 @progress_tracker
 @skip_function
 def binning_list(spectrum_list: sp.SpectrumList,
-                 multiprocessing:bool = True,
+                 force_multiprocessing:bool = True,
                  force_skip:bool =False,
-                 new_spectral_axis = None) -> sp.SpectrumList:
+                 new_spectral_axis: None | sp.spectra.spectral_axis.SpectralAxis = None) -> sp.SpectrumList:
     """
     Bins the spectrum list to a common wavelength grid.
 
@@ -634,12 +758,12 @@ def binning_list(spectrum_list: sp.SpectrumList,
     ----------
     spectrum_list : sp.SpectrumList
         Spectrum list for which to interpolate to common wavelength grid.
-    multiprocessing : bool, optional
+    force_multiprocessing : bool, optional
         Multiprocessing of the function, by default True
     force_skip : bool, optional
         If true, will skip the function completely, by default False
     new_spectral_axis : None | sp.spectra.spectral_axis.SpectralAxis
-        If defined, will interpolate to this wavelength grid. Otherwise, it will interpolate to the wavelength grid of the first spectrum.
+        If defined, will interpolate to this wavelength grid. Otherwise, it will interpolate to the wavelength grid of the first spectrum. By default None.
 
     Returns
     -------
@@ -655,23 +779,18 @@ def binning_list(spectrum_list: sp.SpectrumList,
     new_spectrum_list = sp.SpectrumList()
     if new_spectral_axis is None:
         new_spectral_axis = spectrum_list[0].spectral_axis
-    
-    if multiprocessing:
-        # Run for loop via multiprocessing
-        from pathos.multiprocessing import Pool
-        from itertools import repeat
-        raise NotImplementedError
-        logger.warning('Starting multiprocessing')
+
+    if force_multiprocessing:
+        logger.warning('Starting multiprocessing - interpolation to common grid')
         with Pool() as p:
-            print(p.starmap(interpolate2commonframe,
-                        zip(spectrum_list, repeat(new_spectral_axis))
-                        )
-                  )
+            new_spectrum_list = p.starmap(interpolate2commonframe,
+                        zip(spectrum_list,repeat(new_spectral_axis))
+                        ) 
         logger.warning('Finished multiprocessing')
     else:
         for spectrum in spectrum_list:
             new_spectrum_list.append(
-                interpolate2commonframe(spectrum= spectrum,
+                interpolate2commonframe(spectrum,
                                         new_spectral_axis= new_spectral_axis)
             )
             logger.debug(f'Interpolated spectrum number {spectrum.meta["spec_num"]} on common frame')
@@ -679,26 +798,38 @@ def binning_list(spectrum_list: sp.SpectrumList,
     return new_spectrum_list
 
 #%% normalize_spectrum
-def normalize_spectrum(spectrum,quantile=.85,linfit=False):
-    """
-    Normalize spectrum depending on the size and linfit values.
-    Normalization function is either rolling quantile window (with size of 7500 pixels), or linear fit
+def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                       quantile: float=.85,
+                       polyfit: None | int = None) -> sp.Spectrum1D | sp.SpectrumCollection:
+    if (polyfit is None and # Polynomial fit not requested
+        type(spectrum) == sp.Spectrum1D and # Is a 1D spectrum
+        len(spectrum.spectral_axis) > 10000): # Is longer than 10000 pixels
+        tmp_spec = sp.Spectrum1D(
+            spectral_axis = spectrum.spectral_axis,
+            flux = np.array(
+                pd.Series(spectrum.flux.value).rolling(7500,
+                                                       min_periods=1,
+                                                       center=True
+                                                       ).quantile(quantile))*spectrum.flux.unit,
+                            )
+    else:
+        if polyfit is None:
+            polyfit = 1
+        p = np.polyfit(spectrum.spectral_axis.value[~np.isnan(spectrum.flux)],
+                    spectrum.flux.value[~np.isnan(spectrum.flux)],
+                    1,
+                    rcond=None,
+                    full=False,
+                    w=None,
+                    cov=False
+                    )
+        tmp_spec = sp.Spectrum1D(
+            spectral_axis = spectrum.spectral_axis,
+            flux = (np.polyval(p,spectrum.spectral_axis.value))*pd.Series(spectrum.flux.value / np.polyval(p,spectrum.spectral_axis.value)).quantile(quantile)*spectrum.flux.unit,
+            )
+        
+        pass
     
-    Parameters
-    ----------
-    spectrum : sp.Spectrum1D
-        Spectrum to normalize.
-    quantile : Float [0;1], optional
-        Quantile by which to normalize the spectrum. The default is .85.
-    linfit : bool, optional
-        Whether to fit by linear fit. Works only for spectra of length less than 10000. The default is False.
-
-    Returns
-    -------
-    normalized_spectrum : sp.Spectrum1D
-        Normalized spectrum based on parameters.
-
-    """
     if (len(spectrum.flux) <10000) and linfit==True: 
         p = np.polyfit(spectrum.spectral_axis.value[~np.isnan(spectrum.flux)],
                          spectrum.flux.value[~np.isnan(spectrum.flux)],
@@ -742,23 +873,57 @@ def normalize_spectrum(spectrum,quantile=.85,linfit=False):
 #%% normalize_list
 @progress_tracker
 @save_and_load
-def normalize_list(spec_list,
-                   quantile=.85,
-                   linfit=False,
-                   force_load = False,
-                   force_skip=False):
+def normalize_list(spectrum_list: sp.SpectrumList,
+                   quantile: float= .85,
+                   polyfit_order: int | None= None,
+                   force_multiprocessing: bool= True,
+                   force_load:bool= False,
+                   force_skip:bool= False) -> sp.SpectrumList:
     """
-    Normalize a spectrum list by each spectrum's mean
-    Input:
-        spec_list ; sp.SpectrumList - list to normalize
-    Output:
-        new_spec_list ; sp.SpectrumList - resulting normalized list
+    Normalize a spectrum list
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to normalize.
+    quantile : float, optional
+        Quantile to which to normalize with rolling window, by default .85
+    linfit : bool, optional
+        If true, will do a linear fit instead, by default False
+    force_multiprocessing : bool, optional
+        If true, will run this function through multiprocessing, by default True
+    force_load : bool, optional
+        Whether to force loading of result (True), instead of calculation (False), by default False
+    force_skip : bool, optional
+        Whether to skip running the function completely (True), or run normally (False),, by default False
+
+    Returns
+    -------
+    new_spectrum_list : sp.SpectrumList
+        New spectrum list that has been normalized.
     """
-    
     # For looping through list via multiprocesses
-    num_cores = multiprocessing.cpu_count()
-    new_spec_list = sp.SpectrumList(Parallel(n_jobs=num_cores)(delayed(normalize_spectrum)(i,quantile,linfit) for i in spec_list))
-    return new_spec_list
+    
+    if force_multiprocessing:
+        # raise NotImplementedError
+        logger.warning('Starting multiprocessing - normalization')
+        with Pool() as p:
+            # Throws bunch of warning on weakref, but seems to work. WTF?
+            new_spectrum_list = p.starmap(normalize_spectrum,
+                        zip(spectrum_list, repeat(quantile), repeat(linfit))
+                        )
+        logger.warning('Finished multiprocessing')
+        
+    else:
+        new_spectrum_list = sp.SpectrumList()
+        for spectrum in spectrum_list:
+            new_spectrum_list.append(
+                normalize_spectrum(spectrum= spectrum,
+                                   quantile= quantile,
+                                   polyfit= polyfit_order)
+            )
+
+    return new_spectrum_list
 
 
 
@@ -819,7 +984,7 @@ def cosmic_correction_all(spec_list,force_load=False,force_skip=False):
         # Getting night data
         sublist = get_sublist(spec_list,'Night_num',ni+1)
         # Calculating master_night
-        cosmic_corrected = smcalc.cosmic_correction_night(sublist)
+        cosmic_corrected = smcalc._cosmic_correction_night(sublist)
         # Appending master_night
         new_spec_list.append(cosmic_corrected)
     new_spec_list = sum(new_spec_list,[])
@@ -883,7 +1048,7 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
     
     assert (len(spectrum_list) != 0), 'The spectrum list is empty. Cannot calculate the master.' 
     
-    spectrum_type = smcalc.get_spectrum_type(key= key,
+    spectrum_type = smcalc._get_spectrum_type(key= key,
                                              value= value)
     smcalc._check_night_ordering(spectrum_list)
     number_of_nights = sublist[-1].meta['Night_num']
@@ -948,7 +1113,7 @@ def rm_correction(spec,master,star_para):
     spec_axis = spec.spectral_axis
     # Creating both shifted and unshifted master
     master_non_shifted = deepcopy(master)
-    master_shifted = shift_spectrum(master, 
+    master_shifted = _shift_spectrum(master, 
                        velocities = [vel_RM]
                        )
     # Binning shifted spectrum to same wave_grid
@@ -1202,13 +1367,13 @@ def extract_velocity_field(spectrum:sp.Spectrum1D,
     """
     velocity_field = []
     if shift_BERV != 0:
-        velocity_field.append(spectrum.meta['BERV'] * shift_BERV)
+        velocity_field.append(spectrum.meta['velocity_BERV'].data * spectrum.meta['velocity_BERV'].unit * shift_BERV)
     if shift_v_sys != 0:
-        velocity_field.append(spectrum.meta['vel_sys'] * shift_v_sys)
+        velocity_field.append(spectrum.meta['velocity_system'].data * spectrum.meta['velocity_system'].unit * shift_v_sys)
     if shift_v_star != 0:
-        velocity_field.append(spectrum.meta['vel_st'] * shift_v_star)
+        velocity_field.append(spectrum.meta['velocity_star'].data * spectrum.meta['velocity_star'].unit * shift_v_star)
     if shift_v_planet != 0:
-        velocity_field.append(spectrum.meta['vel_pl'] * shift_v_planet)
+        velocity_field.append(spectrum.meta['velocity_planet'].data * spectrum.meta['velocity_planet'].unit * shift_v_planet)
     if shift_constant != 0:
         velocity_field.append(shift_constant)
     return velocity_field
@@ -1250,49 +1415,94 @@ def shift_spectrum_multiprocessing(spectrum,
                                shift_v_planet = shift_v_planet,
                                shift_constant = shift_constant,
                                )
-    new_spectrum = shift_spectrum(spectrum,velocity_field)
+    new_spectrum = _shift_spectrum(spectrum,velocity_field)
     return new_spectrum
     
 
 #%% shift_list
 @progress_tracker
 @save_and_load
-def shift_list(spec_list_to_shift:sp.SpectrumList,
-                   shift_BERV:float, # Sensible values = 1/0/-1, otherwise BERV is scaled 
-                   shift_v_sys:float, # Sensible values = 1/0/-1, necessary for spectrum to include 'vel_sys' parameter
-                   shift_v_star:float, # Sensible values = 1/0/-1, otherwise scaled
-                   shift_v_planet:float, # Sensible values = 1/0/-1, otherwise scaled
-                   shift_constant=0, # Value in units u.m/u.s (or equivalent)
-                   force_load = False,
-                   force_skip = False,
-                   pkl_name = '',
-                   ):
+def shift_list(spectrum_list:sp.SpectrumList,
+               shift_BERV:float,
+               shift_v_sys:float, 
+               shift_v_star:float, 
+               shift_v_planet:float, 
+               shift_constant:u.Quantity= 0, 
+               shift_key: str | None = None,
+               force_multiprocessing:bool = True,
+               force_load = False,
+               force_skip = False,
+               pkl_name = '',
+               ) -> sp.SpectrumList:
     """
-    Function to shift list of spectra by velocity list
-    Input:
-        spec_list ; sp.SpectrumList - to shift
-        shift_* ; float - if we want to shift by given keyword, with + or - sign
-            shift_BERV - Shifting by BERV
-            shift_v_sys - Shifting by systemic velocity
-            shift_v_star - Shifting by stellar velocity
-            shift_v_planet - Shifting by planetary velocity
-        shift_constant ; float * u.m/u.s - Additional constant shift
+    Shift spectrum list to different rest frame.
 
-    Output:
-        new_spec_list ; sp.SpectrumList - already shifted list of spectra
-            Interpolated to the same wavelength grid[]
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list which to shift.
+    shift_BERV : float
+        Whether to shift spectrum by BERV? If 1, will shift by BERV keyword inside each spectrum. If -1, will shift by -BERV. If 0, will not shift by BERV at all. Other floats are also possible, though the usage is not meaningful.
+    shift_v_sys : float
+        Whether to shift spectrum by systemic velocity. If 1, will shift by v_sys keyword inside each spectrum. If -1, will shift by -v_sys. If 0, will not shift by v_sys at all. Other floats are also possible, though the usage is not meaningful.
+    shift_v_star : float
+        Whether to shift by stellar velocity. If 1, will shift by v_star keyword inside each spectrum. If -1, will shift by -v_star. If 0, will not shift by v_star at all. Other floats are also possible, though the usage is not meaningful.
+    shift_v_planet : float
+        Whether to shift by planet velocity. If 1, will shift by v_planet keyword inside each spectrum. If -1, will shift by -v_planet. If 0, will not shift by v_planet at all. Other floats are also possible, though the usage is not meaningful.
+    shift_constant : u.Quantity, optional
+        Whether to shift by a constant shift, by default 0. Must be astropy quantity with velocity units.
+    shift_key : str | None, optional
+        Whether to shift by custom defined velocity, by default None. If not None, will look for the key in each spectrum.meta parameter. This parameter must be defined and a astropy.units Quantity in units of velocity.
+    force_multiprocessing : bool, optional
+        Whether to force multiprocessing, by default True.
+    force_load : bool, optional
+        _description_, by default False
+    force_skip : bool, optional
+        _description_, by default False
+    pkl_name : str, optional
+        _description_, by default ''
+
+    Returns
+    -------
+    _type_
+        _description_
+
+    Raises
+    ------
+    NotImplementedError
+        _description_
     """
+
+    if shift_key is not None:
+        raise NotImplementedError
     # Deepcopying spec_list
-    spec_list = deepcopy(spec_list_to_shift)
+    spectrum_list = deepcopy(spectrum_list)
     # For cycle that shifts the spectral_axis by given list of velocities
-    num_cores = multiprocessing.cpu_count()
-    new_spec_list = sp.SpectrumList(Parallel(n_jobs=num_cores)(delayed(shift_spectrum_multiprocessing)(item,
-                               shift_BERV,
-                               shift_v_sys,
-                               shift_v_star,
-                               shift_v_planet,
-                               shift_constant) for item in spec_list))
-    return new_spec_list
+    if force_multiprocessing:
+        logger.warning('Starting multiprocessing - Shifting spectrum list')
+        with Pool() as p:
+            new_spectrum_list = p.starmap(shift_spectrum_multiprocessing,
+                                          zip(spectrum_list,
+                                              repeat(shift_BERV),
+                                              repeat(shift_v_sys),
+                                              repeat(shift_v_star),
+                                              repeat(shift_v_planet),
+                                              repeat(shift_constant),
+                                            #   repeat(linfit)
+                                              )
+                        )
+        logger.warning('Finished multiprocessing')
+    else:
+        new_spectrum_list = sp.SpectrumList()
+        for spectrum in spectrum_list:
+            new_spectrum_list.append(
+                shift_spectrum_multiprocessing(spectrum,shift_BERV,
+                                shift_v_sys,
+                                shift_v_star,
+                                shift_v_planet,
+                                shift_constant)
+            )
+    return new_spectrum_list
 #%% sort_spec_list
 @skip_function
 def sort_spec_list(spec_list,force_skip=False):
@@ -1413,7 +1623,7 @@ def RM_simulation(spec_list,master_RF_star_oot,sys_para):
     for item in spec_list:
         if item.meta['Transit_full']:
             # Calculate master out spectrum shifted by local stellar velocity
-            shifted = shift_spectrum(master_RF_star_oot,
+            shifted = _shift_spectrum(master_RF_star_oot,
                                 velocities= [item.meta['vel_stel_loc']]
                                 )
             
@@ -1427,7 +1637,7 @@ def RM_simulation(spec_list,master_RF_star_oot,sys_para):
             new_shifted_1= new_shifted.subtract(tmp_spec)
             
             # Shift to RFP
-            shifted_to_RFP = shift_spectrum(new_shifted_1,
+            shifted_to_RFP = _shift_spectrum(new_shifted_1,
                                 velocities= [-item.meta['vel_st'],item.meta['vel_pl']]
                                 )
             shifted_to_RFP.meta = item.meta.copy()

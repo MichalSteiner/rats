@@ -1,8 +1,61 @@
 from itertools import pairwise
 import specutils as sp
 import numpy as np
-from astropy.nddata import StdDevUncertainty
+import astropy
+from astropy.nddata import StdDevUncertainty, NDDataRef
 import astropy.units as u
+from rats.utilities import default_logger_format
+import logging
+
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
+
+
+#%% Masking of flux below threshold in spectrum
+def _mask_flux_below_threshold(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                               threshold: float = 100,
+                               polynomial_order: int = 6):
+    
+    match type(spectrum):
+        case sp.Spectrum1D:
+            spectral_axis = spectrum.spectral_axis.value
+            flux = spectrum.flux.value
+            weights = 1/(spectrum.uncertainty.array**2)
+            mask_flux = ~np.isfinite(flux)
+            mask_err = ~np.isfinite(weights)
+            mask = np.ma.mask_or(mask_flux, mask_err)
+            
+            polynomial_fit = np.polyfit(spectral_axis, flux, polynomial_order, w= weights)
+            flux_polynomial = np.poly1d(polynomial_fit)(spectral_axis)
+            
+            mask_flux_in_order = np.where(flux_polynomial > threshold)
+            spectrum_order.mask[mask_flux_in_order] = np.nan
+        
+        case sp.SpectrumCollection:
+            for spectrum_order in spectrum:
+                spectral_axis = spectrum_order.spectral_axis.value
+                flux = spectrum_order.flux.value
+                weights = 1#/(spectrum_order.uncertainty.array**2)
+                mask_flux = ~np.isfinite(flux)
+                mask_err = ~np.isfinite(weights)
+                mask = np.logical_or(mask_flux, mask_err)
+                
+                polynomial_fit = np.polyfit(spectral_axis[~mask], flux[~mask], polynomial_order,
+                                            #w= weights[~mask]
+                                            )
+                flux_polynomial = np.poly1d(polynomial_fit)(spectral_axis)
+                
+                mask_flux_in_order = np.where(flux_polynomial < threshold)
+                spectrum_order.mask[mask_flux_in_order] = True
+    
+    # fig,ax = plt.subplots(1)
+    # ax.plot(spectral_axis, flux, color = 'darkblue', alpha=0.6)
+    # ax.plot(spectral_axis[~spectrum_order.mask],flux[~spectrum_order.mask], color = 'darkgreen', alpha=0.6)
+    # ax.plot(spectral_axis[~mask], np.poly1d(polynomial_fit)(spectral_axis[~mask]), color = 'darkred')
+    # ax.axhline(100,ls='--', color='black')
+    
+    return spectrum 
+
 #%% Masking of non-photon noise dominated pixels
 def _mask_non_photon_noise_dominated_pixels_in_spectrum(spectrum: sp.Spectrum1D,
                                                         threshold: float= 0.5) -> sp.Spectrum1D:
@@ -101,7 +154,7 @@ def _error_bin(array: np.ndarray | list) -> float:
     return value
 
 #%% Get spectrum type
-def get_spectrum_type(key: str, value: str | None) -> str:
+def _get_spectrum_type(key: str, value: str | None) -> str:
     """
     Supplementary function giving spec_type value for each key,value used
     Used for labeling plots
@@ -111,8 +164,9 @@ def get_spectrum_type(key: str, value: str | None) -> str:
     Output:
         spec_type ; Type of master spectrum (eg. 'out-of-Transit master')
     """
+    # TODO rewrite so it gives always a type
     # Type of master based on in/out of transit
-    if (key == 'Transit') or (key == 'Transit_full'):
+    if (key == 'Transit_partial') or (key == 'Transit_full'):
         if value == False:
             spectrum_type = 'Out-of-transit'
         else:
@@ -131,6 +185,7 @@ def get_spectrum_type(key: str, value: str | None) -> str:
     if key == None:
         spectrum_type = 'None'
     return spectrum_type
+
 #%% Check order of nights
 def _check_night_ordering(spectrum_list: sp.SpectrumList) -> None:
     """
@@ -154,7 +209,7 @@ def _check_night_ordering(spectrum_list: sp.SpectrumList) -> None:
     return None
 
 #%% cosmic_correction_night
-def cosmic_correction_night(sublist):
+def _cosmic_correction_night(sublist):
     """
     Correction for cosmics in given night
 
@@ -235,44 +290,158 @@ def _calculate_master(
         Master spectrum from the spectrum_list
     """
     
-    assert method in ['addition', 'mean', 'average', 'median'], 'Requested method is not implemented, please check the documentation on which methods are possible.'
-    
     master = _empty_spectrum_like(spectrum_list[0],
                                   unit = spectrum_list[0].flux.unit)
-    weight_sum = _empty_spectrum_like(spectrum_list[0])
+    weight_sum = _empty_spectrum_like(spectrum_list[0],
+                                      unit = None)
+    spectrum_format = type(master)
     
-    match method:
-        case 'addition':
-            #TODO
-            logger.critical('Addition master is not implemented yet! Returning')
-            return
-        case 'median':
-            #TODO
-            logger.critical('Median master is not implemented yet! Returning')
-            return
     
     for spectrum in spectrum_list:
-        _execute_mask_in_spectrum(spectrum)
         spectrum = _remove_NaNs_with_constant(spectrum)
+    
+    match (method, spectrum_format):
+        case 'addition', _:
+            #TODO
+            logger.critical('Addition master is not implemented yet! Returning')
+            raise NotImplementedError
+            return
+        case 'median', _:
+            #TODO
+            logger.critical('Median master is not implemented yet! Returning')
+            raise NotImplementedError
+            return
+        case 'mean' | 'average', sp.Spectrum1D:
+            master = _calculate_mean_master(
+                spectrum_list= spectrum_list,
+                master= master,
+                weight_sum= weight_sum,
+                spectrum_type= spectrum_type,
+                night= night,
+                num_night= num_night,
+                rf= rf,
+                sn_type= sn_type
+                )
+        case 'mean' | 'average', sp.SpectrumCollection:
+            master = _calculate_mean_master_collection(
+                spectrum_list= spectrum_list,
+                master= master,
+                weight_sum= weight_sum,
+                spectrum_type= spectrum_type,
+                night= night,
+                num_night= num_night,
+                rf= rf,
+                sn_type= sn_type
+                )
+        case _, _:
+            raise ValueError('Requested method is not valid.')
+        
+    return master
+
+def _calculate_mean_master(spectrum_list: sp.SpectrumList,
+                           master: sp.Spectrum1D,
+                           weight_sum: sp.Spectrum1D,
+                           spectrum_type: str = '',
+                           night: str = '',
+                           num_night: str = '',
+                           rf: str = '',
+                           sn_type: str | None = None,
+                           ) -> sp.Spectrum1D:
+    """
+    Calculates a mean master from a spectrum list of sp.Spectrum1D.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list which holds all the Spectrum1D spectra.
+    master : sp.Spectrum1D
+        Empty master spectrum reference
+    weight_sum : sp.Spectrum1D
+        Empty weight sum spectrum reference
+    spectrum_type : str, optional
+        Which type of master is being calculated, by default ''
+    night : str, optional
+        For which night is the master calculated, by default ''
+    num_night : str, optional
+        What is the number of night for which the master has been calculated, by default ''
+    rf : str, optional
+        Rest frame in which the master is calculated, by default ''
+    sn_type : str | None, optional
+        Weighting option, by default None.
+
+    Returns
+    -------
+    master : sp.Spectrum1D
+        Average master spectrum.
+    """
+    for spectrum in spectrum_list:
         weights = _gain_weights(spectrum= spectrum,
                                 sn_type= sn_type)
         master = master.add(spectrum.multiply(weights))
         weight_sum = weight_sum.add(weights)
         
-    if method == 'average' or method == 'mean':
-        master = master.divide(weight_sum)
+    master = master.divide(weight_sum)
     
     master.meta = {
         'rf': rf,
         'num_night': num_night,
         'night': night,
         'sn_type': sn_type,
-        'method': method,
+        'method': 'average',
         'type': spectrum_type,
         }
+    return master
+#%% 
+def _calculate_mean_master_collection(
+    spectrum_list: sp.SpectrumList,
+    master: sp.Spectrum1D,
+    weight_sum: sp.Spectrum1D,
+    spectrum_type: str = '',
+    night: str = '',
+    num_night: str = '',
+    rf: str = '',
+    sn_type: str | None = None
+    ) -> sp.SpectrumCollection:
+    #DOCUMENTME
+    master_flux = NDDataRef(
+            data= master.flux,
+            uncertainty= master.uncertainty
+            )
+    weight_sum_flux = NDDataRef(
+        data= weight_sum.flux
+        )
+    
+    for spectrum in spectrum_list:
+        flux_2D = NDDataRef(
+            data= spectrum.flux,
+            uncertainty= spectrum.uncertainty)
+        
+        weights_flux = _gain_weights(spectrum= spectrum,
+                                     sn_type= sn_type)
+        master_flux = master_flux.add(flux_2D.multiply(weights_flux))
+        weight_sum_flux = weight_sum_flux.add(weights_flux)
+
+    master_flux = master_flux.divide(weight_sum_flux)
+    meta = {
+        'rf': rf,
+        'num_night': num_night,
+        'night': night,
+        'sn_type': sn_type,
+        'method': 'average',
+        'type': spectrum_type,
+        }
+    master = sp.SpectrumCollection(
+        spectral_axis= master.spectral_axis,
+        flux = master_flux.data * master_flux.unit,
+        uncertainty= master_flux.uncertainty,
+        mask = np.isnan(master_flux.data),
+        meta= meta
+        )
     
     return master
 
+
+#%%
 def _remove_NaNs_with_constant(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                                constant: float = 0) -> sp.Spectrum1D | sp.SpectrumCollection:
     """
@@ -319,14 +488,14 @@ def _remove_NaNs_with_constant(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
             )
     return new_spectrum
 
-def _gain_weights(spectrum: sp.Spectrum1D,
-                  sn_type: str | None = None) -> sp.Spectrum1D:
+def _gain_weights(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                  sn_type: str | None = None) -> sp.Spectrum1D | astropy.nddata.NDDataRef:
     """
     Generate weight spectrum for the master calculation.
 
     Parameters
     ----------
-    spectrum : sp.Spectrum1D
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
         Spectrum for which to generate the weights array.
     sn_type : str | None
         Type of weighting, by default None.
@@ -345,17 +514,25 @@ def _gain_weights(spectrum: sp.Spectrum1D,
             
     Returns
     -------
-    weights : sp.Spectrum1D
-        Weights for the spectrum.
+    weights : sp.Spectrum1D | astropy.nddata.NDDataRef
+        Weights for the spectrum. If spectrum collection is used, a NDDataRef object is passed back, as the calculation is done on this object instead of the collections themselves. This is to avoid slow for-looping over orders.
     """
-    weights = _empty_spectrum_like(spectrum= spectrum,
-                                   constant= 1)
+    if type(spectrum) == sp.SpectrumCollection:
+        weights = NDDataRef(
+            data = np.ones_like(spectrum.flux.value)
+        )
+    elif type(spectrum) == sp.Spectrum1D:
+        weights = _empty_spectrum_like(spectrum= spectrum,
+                                       constant= 1)
+    else:
+        logger.critical('Spectrum type not found.')
+        raise ValueError('Spectrum type is not valid. Only sp.Spectrum1D and sp.SpectrumCollection can be requested.')
     
     match sn_type:
         case None:
             pass
         case 'Average_S_N':
-            weights = weights.multiply(spectrum.meta['Average_S_N'])
+            weights = weights.multiply(spectrum.meta['Average_S_N'] * u.dimensionless_unscaled)
         case 'quadratic':
             weights = weights.multiply(spectrum.meta['Average_S_N'] ** 2 * u.dimensionless_unscaled)
         case 'quadratic_error':
@@ -364,10 +541,8 @@ def _gain_weights(spectrum: sp.Spectrum1D,
         case 'quadratic_combined':
             weights = weights.multiply(spectrum.uncertainty.array**2 * u.dimensionless_unscaled)
             weights = weights.multiply(spectrum.meta['delta']**2 * u.dimensionless_unscaled)
-            
+    
     return weights
-
-
 
 def _empty_spectrum_like(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                          constant: float | int = 0,

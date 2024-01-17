@@ -328,6 +328,22 @@ class CalculationSystem:
         for spectrum in spectra_list:
             self._calculate_velocities_spectrum(spectrum= spectrum)
     
+    def add_velocity_system_in_list(self,
+                                    spectra_list: sp.SpectrumList) -> None:
+        """
+        Adds systemic velocity to all spectra in list based on the self.System.systemic_velocity attribute.
+
+        Parameters
+        ----------
+        spectra_list : sp.SpectrumList
+            Spectra list to which to update the systemic velocity.
+        """
+        
+        for spectrum in spectra_list:
+            spectrum.meta['velocity_system'] = self.System.systemic_velocity
+
+
+    
     def _create_Keplerian_model(self):
         phase = np.linspace(-0.5, 0.5, 1000)
         

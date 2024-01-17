@@ -17,7 +17,6 @@ import specutils as sp
 import numpy as np
 import matplotlib.ticker as mtick
 import astropy.io.fits as fits
-import rats
 import astropy.constants as con
 import typing
 import pandas as pd

@@ -248,7 +248,7 @@ class Hex():
             flux= sme.synth[0] * u.dimensionless_unscaled, 
             uncertainty= np.zeros_like(sme.wave[0])
             )
-        self.local_spectrum = sm.shift_spectrum(self.local_spectrum,
+        self.local_spectrum = sm._shift_spectrum(self.local_spectrum,
                                                 velocities= [self.local_stellar_velocity * u.km/u.s])
         return
 
