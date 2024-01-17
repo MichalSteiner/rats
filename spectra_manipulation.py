@@ -624,27 +624,37 @@ def interpolate2commonframe(spectrum,new_spectral_axis):
 @progress_tracker
 @skip_function
 def binning_list(spectrum_list: sp.SpectrumList,
-                 multiprocessing = True,
-                 force_skip:bool =False) -> sp.SpectrumList:
+                 multiprocessing:bool = True,
+                 force_skip:bool =False,
+                 new_spectral_axis = None) -> sp.SpectrumList:
     """
-    Reinterpolates the spectrum list to same wavelength grid.
+    Bins the spectrum list to a common wavelength grid.
 
     Parameters
     ----------
-    spec_list : sp.SpectrumList
-        Spectrum list to interpolate to same wavelength grid.
+    spectrum_list : sp.SpectrumList
+        Spectrum list for which to interpolate to common wavelength grid.
+    multiprocessing : bool, optional
+        Multiprocessing of the function, by default True
     force_skip : bool, optional
-        Whether to skip this function. Useful for loading output later in the pipeline. The default is False.
+        If true, will skip the function completely, by default False
+    new_spectral_axis : None | sp.spectra.spectral_axis.SpectralAxis
+        If defined, will interpolate to this wavelength grid. Otherwise, it will interpolate to the wavelength grid of the first spectrum.
 
     Returns
     -------
-    new_spec_list : sp.SpectrumList
-        Spectrum list with common wavelength frame.
+    new_spectrum_list : sp.SpectrumList
+        New spectrum list that is interpolated to a common wavelength grid
 
+    Raises
+    ------
+    NotImplementedError
+        The multiprocessing is currently not implemented
     """
 
     new_spectrum_list = sp.SpectrumList()
-    new_spectral_axis = spectrum_list[0].spectral_axis
+    if new_spectral_axis is None:
+        new_spectral_axis = spectrum_list[0].spectral_axis
     
     if multiprocessing:
         # Run for loop via multiprocessing
@@ -732,7 +742,11 @@ def normalize_spectrum(spectrum,quantile=.85,linfit=False):
 #%% normalize_list
 @progress_tracker
 @save_and_load
-def normalize_list(spec_list,quantile=.85,linfit=False,force_load = False,force_skip=False):
+def normalize_list(spec_list,
+                   quantile=.85,
+                   linfit=False,
+                   force_load = False,
+                   force_skip=False):
     """
     Normalize a spectrum list by each spectrum's mean
     Input:
