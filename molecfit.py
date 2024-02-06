@@ -14,7 +14,12 @@ import os as os
 import astropy
 import rats.eso as eso
 import rats.spectra_manipulation as sm
-from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function, todo_function
+from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function, todo_function, default_logger_format
+import logging
+
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
+
 
 #%% molec_fit_table_fits
 def molec_fit_table_fits(spec_coll):
@@ -47,13 +52,101 @@ def molec_fit_table_fits(spec_coll):
         thdulist.writeto(name.replace('raw','molecfit_input/%i'%(ii)))
     return
 
+#%%
+def molecfit_output(main_directory: str,
+                    spectrum_type: str = 'S1D',
+                    mask_threshold: float = 0,
+                    ) -> [sp.SpectrumList, sp.SpectrumList, sp.SpectrumList]:
+    
+    spectrum_directory = main_directory + '/spectroscopy_data/'
+    
+    corrected_spectra = sp.SpectrumList()
+    telluric_profiles = sp.SpectrumList()
+    uncorrected_spectra = sp.SpectrumList()
+    
+    logger.info('Loading molecfit output:')
+    logger.info('='*50)
+    for instrument in os.listdir(spectrum_directory):
+        instrument_directory = spectrum_directory + '/' + instrument
+        logger.info(f'Loading instrument: {instrument}')
+        for night in os.listdir(instrument_directory):
+            logger.info(f'    Loading night: {night}')
+            molecfit_output_path = instrument_directory + '/' + night + '/Fiber_A/S1D/molecfit/molecfit_output/'
+            
+            for item in os.listdir(molecfit_output_path):
+                if not(item.endswith('.fits')) or not(item.startswith('SCIENCE')):
+                    continue
+                
+                corrected_spectrum, telluric_profile, uncorrected_spectrum = _load_molecfit_output_single_spectrum(molecfit_output_path + item, spectrum_type, mask_threshold)
+                corrected_spectra.append(corrected_spectrum)
+                telluric_profiles.append(telluric_profile)
+                uncorrected_spectra.append(uncorrected_spectrum)
+                
+    
+    eso._numbering_nights(corrected_spectra)
+    eso._numbering_nights(uncorrected_spectra)
+    
+    return corrected_spectra, telluric_profiles, uncorrected_spectra
+
+def _load_molecfit_output_single_spectrum(filename: str,
+                                          spectrum_type: str = 'S1D',
+                                          mask_threshold: float = 0):
+    
+    if spectrum_type != 'S1D':
+        raise NotImplementedError('It is not possible to load S2D files yet.')
+    
+    f = fits.open(filename) 
+    
+    meta = eso._basic_meta_parameters()
+    meta.update({
+        'header': f[0].header,
+        'BERV_corrected': True,
+        'RF_Barycenter': True,
+        'RF': 'Barycenter_Sol',
+        'vacuum': False,
+        'air': True
+        })
+    meta.update(eso._load_meta_from_header(f[0].header))
+    
+    mask_ind = np.where(f[2].data < mask_threshold)
+    flux = f[1].data['flux']
+    error = f[1].data['error']
+    flux[mask_ind] = np.nan
+    error[mask_ind] = np.nan
+    
+    
+    corrected_spectrum = sp.Spectrum1D( # Define the spectrum
+        spectral_axis = f[1].data['wavelength_air']*u.AA,
+        flux = flux*u.ct,
+        uncertainty = astropy.nddata.StdDevUncertainty(error),
+        meta = meta,
+        mask = np.isnan(flux),
+        )
+    
+    telluric_profile = sp.Spectrum1D( # Define the spectrum
+        spectral_axis = f[1].data['wavelength_air']*u.AA,
+        flux = f[2].data*u.ct,
+        )
+    
+    uncorrected_spectrum = sp.Spectrum1D( # Define the spectrum
+        spectral_axis = f[3].data['wavelength_air']*u.AA,
+        flux = f[3].data['flux']*u.ct,
+        uncertainty = astropy.nddata.StdDevUncertainty(f[3].data['error']),
+        meta = meta,
+        mask = np.isnan(f[3].data['flux']),
+        )
+    
+    return corrected_spectrum, telluric_profile, uncorrected_spectrum
+
+
+
 #%% molecfit_new_output
 # =============================================================================
 # Likely bugged with telluric profiles being in different rest frame
 # =============================================================================
 @todo_function
 @progress_tracker
-def molecfit_new_output(instrument_directory: str,
+def molecfit_new_output(main_directory: str,
                         spec_type: str = 'S1D',
                         mask_threshold: float = 0,
                         )->[sp.SpectrumList, sp.SpectrumList, sp.SpectrumList]:
@@ -77,67 +170,74 @@ def molecfit_new_output(instrument_directory: str,
     spec_list_profile = sp.SpectrumList()
     spec_list_noncorrected = sp.SpectrumList()
     
-    for ind,night in enumerate(os.listdir(instrument_directory)): # Looping through each night
-        molecfit_output_directory = instrument_directory + '/' + night + '/Fiber_A/S1D/molecfit/molecfit_output'
-        
-        for ii,item in enumerate(os.listdir(molecfit_output_directory)): # Looping through each file
-            if item.startswith('SCIENCE'): # Only SCIENCE fits files
+    
+    
+    
+    for instrument in os.listdir(main_directory+'/spectroscopy_data'):
+        for ind, night in enumerate(os.listdir(main_directory+'/spectroscopy_data/'+instrument)): # Looping through each night
+            molecfit_output_directory = main_directory+'/spectroscopy_data/'+instrument + '/' + night + '/Fiber_A/S1D/molecfit/molecfit_output'
             
-                f = fits.open(molecfit_output_directory + '/' + item) 
-                meta = {'header':f[0].header}
-                meta.update(eso.load_meta_from_header_new_pipeline(f[0].header))
-                meta.update(eso.set_meta_parameters())
-                meta.update(eso.set_meta_velocity_corrections())
-                meta.update({
-                                'Night':night,
-                                'Night_num': ind+1,
-                                'Night_spec_num':ii+1,
-                    })
+            for ii,item in enumerate(os.listdir(molecfit_output_directory)): # Looping through each file
+                if item.startswith('SCIENCE'): # Only SCIENCE fits files
                 
-                eso.set_filename_header(meta,molecfit_output_directory + '/' + item)
-                meta['blaze_corrected'] = True
-                meta['telluric_corrected'] = True
-                meta['S_N']= meta['Average S_N']
-                meta.update({
-                                'Night':night,
-                                'Night_num': ind+1,
-                                'Night_spec_num':ii+1,
-                    })
-                mask_ind = np.where(f[2].data<mask_threshold)
-                flux = f[1].data['flux']
-                error = f[1].data['error']
-                flux[mask_ind] = np.nan
-                error[mask_ind] = np.nan
-                
-                tmp_spec = sp.Spectrum1D( # Define the spectrum
-                    spectral_axis = f[1].data['wavelength_air']*u.AA,
-                    flux = flux*u.ct,
-                    uncertainty = astropy.nddata.StdDevUncertainty(error),
-                    meta = meta,
-                    mask = np.isnan(flux),
-                    wcs = sm.add_spam_wcs(),
-                    )
-                spec_list.append(tmp_spec) # Append the spectrum
-                
-                tmp_spec_profile = sp.Spectrum1D( # Define the spectrum
-                    spectral_axis = f[1].data['wavelength_air']*u.AA,
-                    flux = f[2].data*u.ct,
-                    wcs = sm.add_spam_wcs(),
-                    )
-                spec_list_profile.append(tmp_spec_profile) # Append the spectrum
-                
-                tmp_spec_noncorrected = sp.Spectrum1D( # Define the spectrum
-                    spectral_axis = f[3].data['wavelength_air']*u.AA,
-                    flux = f[3].data['flux']*u.ct,
-                    uncertainty = astropy.nddata.StdDevUncertainty(f[3].data['error']),
-                    meta = meta,
-                    mask = np.isnan(f[3].data['flux']),
-                    wcs = sm.add_spam_wcs(),
-                    )
-                spec_list_noncorrected.append(tmp_spec_noncorrected) # Append the spectrum
-                
-                del(tmp_spec) # Delete the variable
-                del(tmp_spec_profile)
+                    f = fits.open(molecfit_output_directory + '/' + item) 
+                    meta = {'header':f[0].header}
+                    
+                    
+                    
+                    meta.update(eso.load_meta_from_header_new_pipeline(f[0].header))
+                    meta.update(eso.set_meta_parameters())
+                    meta.update(eso.set_meta_velocity_corrections())
+                    meta.update({
+                                    'Night':night,
+                                    'Night_num': ind+1,
+                                    'Night_spec_num':ii+1,
+                        })
+                    
+                    eso.set_filename_header(meta,molecfit_output_directory + '/' + item)
+                    meta['blaze_corrected'] = True
+                    meta['telluric_corrected'] = True
+                    meta['S_N']= meta['Average S_N']
+                    meta.update({
+                                    'Night':night,
+                                    'Night_num': ind+1,
+                                    'Night_spec_num':ii+1,
+                        })
+                    mask_ind = np.where(f[2].data<mask_threshold)
+                    flux = f[1].data['flux']
+                    error = f[1].data['error']
+                    flux[mask_ind] = np.nan
+                    error[mask_ind] = np.nan
+                    
+                    tmp_spec = sp.Spectrum1D( # Define the spectrum
+                        spectral_axis = f[1].data['wavelength_air']*u.AA,
+                        flux = flux*u.ct,
+                        uncertainty = astropy.nddata.StdDevUncertainty(error),
+                        meta = meta,
+                        mask = np.isnan(flux),
+                        wcs = sm.add_spam_wcs(),
+                        )
+                    spec_list.append(tmp_spec) # Append the spectrum
+                    
+                    tmp_spec_profile = sp.Spectrum1D( # Define the spectrum
+                        spectral_axis = f[1].data['wavelength_air']*u.AA,
+                        flux = f[2].data*u.ct,
+                        wcs = sm.add_spam_wcs(),
+                        )
+                    spec_list_profile.append(tmp_spec_profile) # Append the spectrum
+                    
+                    tmp_spec_noncorrected = sp.Spectrum1D( # Define the spectrum
+                        spectral_axis = f[3].data['wavelength_air']*u.AA,
+                        flux = f[3].data['flux']*u.ct,
+                        uncertainty = astropy.nddata.StdDevUncertainty(f[3].data['error']),
+                        meta = meta,
+                        mask = np.isnan(f[3].data['flux']),
+                        wcs = sm.add_spam_wcs(),
+                        )
+                    spec_list_noncorrected.append(tmp_spec_noncorrected) # Append the spectrum
+                    
+                    del(tmp_spec) # Delete the variable
+                    del(tmp_spec_profile)
                 
     eso.set_meta_numbering(spec_list)
     eso.set_meta_numbering(spec_list_noncorrected)

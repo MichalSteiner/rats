@@ -14,6 +14,9 @@ import petitRADTRANS.nat_cst as nc
 from rats.modeling_CCF_lists import *
 import os
 import specutils as sp
+import astropy
+import scipy as sci
+import pandas as pd
 import numpy as np
 import astropy.units as u
 from petitRADTRANS.physics import guillot_global
@@ -239,6 +242,19 @@ def _print_mass_abundance(mass_fraction: dict):
     """
     for key in mass_fraction.keys():
         logger.print(f'Abundance of species {key}: {mass_fraction[key]}')
+#%% Shifting between air and vacuum wavelengths
+'''Shifting air to vac and vac to air wavelength'''
+def airtovac(wlnm):
+    wlA=wlnm*10.0
+    s = 1e4 / wlA
+    n = 1 + 0.00008336624212083 + 0.02408926869968 / (130.1065924522 - s**2) + 0.0001599740894897 / (38.92568793293 - s**2)
+    return(wlA*n/10.0)
+
+def vactoair(wlnm):
+    wlA = wlnm*10.0
+    s = 1e4/wlA
+    f = 1.0 + 5.792105e-2/(238.0185e0 - s**2) + 1.67917e-3/( 57.362e0 - s**2)
+    return(wlA/f/10.0)
 
 #%% List species available
 def list_species_list():
@@ -368,16 +384,35 @@ def print_detectability(template_list: sp.SpectrumList):
     
     return
 
+def _subtract_continuum(model: sp.Spectrum1D):
+
+    continuum = sp.Spectrum1D(
+            spectral_axis = model.spectral_axis,
+            flux = np.array(
+                pd.Series(model.flux.value).rolling(
+                    7500,
+                    min_periods=1,
+                    center=True
+                    ).quantile(0.25)
+                )*model.flux.unit)
+    
+    model = model.subtract(continuum)
+    
+    return model
+
 #%% Create a single template with petitRADtrans
 def _create_single_template(SystemParameters: para.SystemParametersComposite,
                             spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
                             species: str,
                             MMW_value : float = 2.33,
+                            P0: float = 1,
                             ):
     # DOCUMENTME
     is_sorted = lambda a: np.all(a[:-1] <= a[1:])
     assert is_sorted(spectral_axis), 'The spectral axis is not sorted, which is assumed for this function. Please sort the wavelength grid prior to creating templates.'
     
+    spectral_axis_old = spectral_axis
+    spectral_axis = airtovac(spectral_axis.value) * spectral_axis.unit
     
     atmosphere = Radtrans(line_species = [species],
         wlen_bords_micron = [spectral_axis[0].to(u.um).value, # Spectrum wavelength-range
@@ -386,8 +421,6 @@ def _create_single_template(SystemParameters: para.SystemParametersComposite,
         )
     
     # System parameters
-    # FIXME Check the initial pressure
-    P0 = 1
     R_pl = SystemParameters.Planet.radius.convert_unit_to(u.cm).data
     gravity = SystemParameters.Planet.gravity_acceleration.convert_unit_to(u.cm/u.s/u.s).data
     temperature = _T_P_profile_guillot(SystemParameters= SystemParameters,
@@ -397,12 +430,6 @@ def _create_single_template(SystemParameters: para.SystemParametersComposite,
     mass_fraction = _prepare_mass_fraction_for_petitRADTrans(ABUNDANCE_SOLAR_METALLICITY,
                                                              temperature,
                                                              )
-    
-    logger.debug(f'Calculating transmission spectroscopy model for species: {species} with these parameters:')
-    logger.debug(f'    T-P profile by guillot approximation')
-    logger.debug(f'    Abundance of {species} is {mass_fraction[species][0]}')
-    logger.debug(f'    Mean molecular weight is assumed as {MMW_value}')
-    logger.debug(f'    Planet radius is {R_pl}, at which the pressure is assumed {P0}')
 
     atmosphere.calc_transm(temperature,
                            mass_fraction,
@@ -413,73 +440,48 @@ def _create_single_template(SystemParameters: para.SystemParametersComposite,
                            )
     
     wavelength_grid =  nc.c/atmosphere.freq/1e-4 * 10000 * u.AA
-    flux = np.where(atmosphere.transm_rad/nc.r_jup_mean > SystemParameters.Planet.radius.convert_unit_to(u.R_jup).data, # If above 1-planet radii
-                    atmosphere.transm_rad/nc.r_jup_mean, # No-mask
-                    SystemParameters.Planet.radius.convert_unit_to(u.R_jup).data # Otherwise mask to 1-planet radii
-                    )
-    # FIXME This is a dumb way to solve
-    if flux.min() != SystemParameters.Planet.radius.convert_unit_to(u.R_jup).data:
-        logger.warning(f'The continuum level for species: {species} is not at surface.')
-        flux -= flux.min() - SystemParameters.Planet.radius.convert_unit_to(u.R_jup).data
-    
-    # TODO - Give to separate function
-    total_model_flux = flux - SystemParameters.Planet.radius.convert_unit_to(u.R_jup).data
-    assert (total_model_flux.min() == 0), 'The model continuum is above the surface.'
-    
-    CCF_detectability = sum(total_model_flux)
-    logger.print(f'CCF detectability of {species} is {CCF_detectability}.')
+    wavelength_grid = vactoair(wavelength_grid.value) * wavelength_grid.unit
+    flux = atmosphere.transm_rad/nc.r_jup_mean
     
     template = sp.Spectrum1D(
         spectral_axis = wavelength_grid,
         flux = flux * u.R_jup,
+        uncertainty= astropy.nddata.StdDevUncertainty(np.zeros_like(flux)),
+        mask = np.zeros_like(flux),
         meta = {
             'model': 'petitRADtrans',
             'species': species,
-            'CCF_detectability': CCF_detectability,
             }
         )
+
+    template = _subtract_continuum(template)
+    
+    flux_interpolate = sci.interpolate.CubicSpline(
+        template.spectral_axis.value,
+        template.flux.value,
+        extrapolate= False
+        )
+    
+    template = sp.Spectrum1D(
+        spectral_axis = spectral_axis_old,
+        flux = flux_interpolate(spectral_axis_old) * u.R_jup,
+        uncertainty= astropy.nddata.StdDevUncertainty(np.zeros_like(spectral_axis_old)),
+        mask = np.zeros_like(spectral_axis_old),
+        meta = {
+            'model': 'petitRADtrans',
+            'species': species,
+            }
+        )
+    
     
     return template
 
 #%% Create all available templates
-@time_function
-@save_and_load
 def create_all_available_templates(SystemParameters: para.SystemParametersComposite,
                                    spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
                                    species_list: None | list = None,
                                    MMW_value: float = 2.33,
-                                   force_empty: bool = False,
-                                   force_load: bool = False,
-                                   force_skip: bool = False,
-                                   pkl_name = 'petitRADtrans_templates.pkl'
                                    ) -> sp.SpectrumList:
-    """
-    Create all possible templates with petitRADtrans. It will add by default only non-empty templates into the list. 
-
-    Parameters
-    ----------
-    SystemParameters : para.SystemParametersComposite
-        System parameters for explored system
-    spectral_axis : sp.spectra.spectral_axis.SpectralAxis
-        Wavelength grid to which to interpolate the template
-    species_list : None | list, optional
-        List of species for which to calculate, by default None. If None, all possible species available in petitRADtrans will be used.
-    MMW_value : float, optional
-        Mean Molecular Weight, by default 2.33
-    force_empty : bool, optional
-        If True, will add empty templates to the template list, by default False
-    force_load : bool, optional
-        If True, will try to load the output, instead of rerunning the function, by default False
-    force_skip : bool, optional
-        If True, will skip the function entirely, without providing the output, by default False. This can be used to analyze quickly a specific step without overloading memory.
-    pkl_name : str, optional
-        Filename where to save data, by default 'petitRADtrans_templates.pkl'
-
-    Returns
-    -------
-    template_list : sp.SpectrumList
-        Template list for all possible species.
-    """
     
     if species_list is None:
         species_list = SPECIES_LIST
@@ -501,6 +503,19 @@ def create_all_available_templates(SystemParameters: para.SystemParametersCompos
             template_list.append(template)
     
     return template_list
+
+def _create_template_grid(
+    SystemParameters: para.SystemParametersComposite,
+    spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
+    species_list: None | list = None,
+    MMW_value: float = 2.33,
+    ):
+    
+    abundance = np.logspace(-11, -1, 10)
+    
+    
+    
+    return
 
 #%%
 if __name__ == '__main__':
@@ -539,3 +554,5 @@ if __name__ == '__main__':
     
     logger.info('Test of rats.modeling_CCF successful')
     
+
+

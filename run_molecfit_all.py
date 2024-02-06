@@ -5,27 +5,6 @@ Created on Tue Jul 12 14:10:25 2022
 
 @author: chamaeleontis
 
-TODO:
-    Implement wavelength frame
-"""
-
-#%% Import libraries
-import numpy as np
-import astropy.io.fits as fits
-import subprocess
-from matplotlib.widgets import Button
-import matplotlib.pyplot as plt
-import os
-import matplotlib.gridspec as gs
-from rats.utilities import default_logger_format
-import logging
-#%% Setting up logging
-logger = logging.getLogger(__name__)
-logger = default_logger_format(logger)
-
-
-#%% Usage
-'''
 To use this code:
     0. Setup esorex command (needs to be full command, alias won't work)
     1. Setup directory root which should consist of these folders:
@@ -60,8 +39,26 @@ Main issues:
 By default, the single_use setup will provide the molecfit folders with correct instrument setup for HARPS, ESPRESSO and NIRPS. The wavelength bands provided are mostly correct, but need checking for possibly stellar contamination inside.
 
 TODO:
-    Test that the code works using the run_molecfit_all function
-'''
+    Test that the code works using the run_molecfit_all function.
+    Implement wavelength frame
+    If necessary, consider multiprocessing on each call of molecfit. This need to disable interactive mode completely. Furthermore, the usage of tmp_directories needs to be implemented.
+    
+"""
+
+#%% Import libraries
+import numpy as np
+import astropy.io.fits as fits
+import subprocess
+from matplotlib.widgets import Button
+import matplotlib.pyplot as plt
+import os
+import matplotlib.gridspec as gs
+from rats.utilities import default_logger_format
+import logging
+#%% Setting up logging
+logger = logging.getLogger(__name__)
+logger = default_logger_format(logger)
+
 #%%
 # Location of esorex command, alias won't work!
 command_esorex = "/home/chamaeleontis/esoreflex/esoreflex/bin/esorex"
@@ -806,12 +803,17 @@ def update_header(item):
     return
 #%% Run_molecfit_all
 def run_molecfit_night(directory_root: str,
-                       force_s2d=False):
+                       force_s2d= False,
+                       force_all= False,
+                       run_noninteractive: bool = False):
     '''
     Run the entire molecfit pipeline for the given spectrum
     '''
-    global force_sgl,force_all
-    if os.listdir(directory_molecfit_input) == 0:
+    global force_sgl
+    setup_directories(directory_root)
+    
+    
+    if len(os.listdir(directory_molecfit_input)) == 0:
         logger.warning('The input directory is empty:')
         logger.warning('Looking into directory:')
         logger.warning(directory_molecfit_input)
@@ -827,6 +829,8 @@ def run_molecfit_night(directory_root: str,
     create_region_fits_files(os.listdir(directory_molecfit_input)[0]) # Create new region fits file if not existing
     
     for file_item in os.listdir(directory_molecfit_input): # Run through all spectra
+        
+        
         if not(file_item.endswith('.fits')):
             pass
         item = directory_molecfit_input + '/' + file_item # Path to current spectrum
@@ -850,8 +854,13 @@ def run_molecfit_night(directory_root: str,
         run_molecfit_correct() # molecfit_correct
         update_header(item) # Update header of resulting fits file
 
+        logger.info('Finished reducing spectrum')
+        logger.info(f'There is still {len(os.listdir(directory_molecfit_input))} spectra in current night directory')
+        
         if not(force_all): # Restart the force_sgl flag
             force_sgl = False
+    if not(run_noninteractive):
+        force_all, force_sgl = False, False
     return
 #%%
 def setup_directories(directory_root: str):
@@ -902,17 +911,20 @@ def setup_directories(directory_root: str):
     command_molecfit_correct = [command_esorex,'--recipe-config=%s'%rc_para_correct,'molecfit_correct',sof_para_correct]
     return
 #%%
-def run_molecfit_all(main_directory: str):
-    for subdir, _, _ in os.walk(main_directory + '/data/spectra'):  
-        if subdir.endswith('molecfit'):
+def run_molecfit_all(main_directory: str,
+                     force_all: bool = False,
+                     run_noninteractive: bool = False):
+    for root, subdir, filename in os.walk(main_directory + '/spectroscopy_data'):  
+        if root.endswith('molecfit'):
             logger.info('Running molecfit on folder:')
-            logger.info(subdir)
+            logger.info(root)
             run_molecfit_night(
-                directory_root= subdir,
-                force_s2d= False
+                directory_root= root,
+                force_s2d= False,
+                force_all= force_all,
+                run_noninteractive= run_noninteractive
             )
+        else:
+            logger.info(f'Ignoring direcotry {subdir}')
+        
     return
-
-#%%
-if __name__ == '__main__':
-    run_molecfit_night()

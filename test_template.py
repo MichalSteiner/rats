@@ -250,7 +250,7 @@ fiber_B_master = sm.calculate_master_list(data_deblaze_s1d_B,key = None,)
 # Replace the input of sm.binning list for S2D spectra
 # TODO: Replace these functions with save/load-able pickles for the code to run faster
 # =============================================================================
-data_deblaze_s1d_A_sorted = sm.sort_spec_list(data_deblaze_s1d_A,
+data_deblaze_s1d_A_sorted = sm.sort_spectrum_list(data_deblaze_s1d_A,
                                               force_skip = force_skip
                                               )
 data_binned = sm.binning_list(data_deblaze_s1d_A_sorted,

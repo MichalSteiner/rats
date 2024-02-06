@@ -28,54 +28,57 @@ color_pallete_deep = sns.color_palette("deep")
 color_pallete_bright = sns.color_palette("bright")
 mpl.rcParams['axes.prop_cycle'] = mpl.cycler(color=color_pallete_dark) 
 
-#%% Figure_class
-class Figure_overview:
-    '''
-    Create a class of figure
-    
-    '''
-    def plot(self):
-        fig,axs = self.function(*self.function_args)
-        return fig,axs
-    
-    def plot_all_styles(self):
-        import rats.matplotlib_style_sheets.basic_paper
-        with plt.ioff():
-            fig,axs = self.plot()
-            os.makedirs(self.figure_directory + '/spectra/style/basic_paper/', mode = 0o777, exist_ok = True) 
-            fig.savefig(self.figure_directory + '/spectra/style/basic_paper/' + self.figure_name)
-            os.makedirs(self.figure_directory + '/spectra/style/basic_paper_transparent/', mode = 0o777, exist_ok = True) 
-            fig.savefig(self.figure_directory + '/spectra/style/basic_paper_transparent/' + self.figure_name,transperent=True)
-        
-        import rats.matplotlib_style_sheets.dark_mode_presentation
-        with plt.ioff():
-            fig,axs = self.plot()
-            os.makedirs(self.figure_directory + '/spectra/style/dark_mode_presentation/', mode = 0o777, exist_ok = True) 
-            fig.savefig(self.figure_directory + '/spectra/style/dark_mode_presentation/' + self.figure_name)
-            os.makedirs(self.figure_directory + '/spectra/style/dark_mode_presentation_transparent/', mode = 0o777, exist_ok = True) 
-            fig.savefig(self.figure_directory + '/spectra/style/dark_mode_presentation_transparent/' + self.figure_name,transperent=True)
-    
 
+def wavelength_to_rgb(wavelength: u.Quantity):
+    """
+    Convert a wavelength in nanometers to an RGB color.
+    """
     
-    def __init__(self,function,figure_directory,figure_name,show_plot=True,*function_args):
-        '''
-        Initialization class
-        
-        Input:
-            function ; function - plotting function
-            figure_directory ; directory - where to save figures with spectra/photometry choice chosen
-            figure_name ; str - name of the figure, no extensions
-            show_plot = True ; bool - whether to show plot right now
-            *function_args = arguments - arguments to use in the function, can be whatever and however long
-        '''
-        self.function = function
-        self.function_args = function_args
-        self.figure_directory = figure_directory
-        self.figure_name = figure_name
-        if show_plot:
-            self.plot()
-        return
-    
+    wavelength = wavelength.to(u.nm)
+    if wavelength < 380:
+        wavelength = 380
+    if wavelength > 750:
+        wavelength = 750
+
+    if 380 <= wavelength <= 440:
+        R = -(wavelength - 440) / (440 - 380)
+        G = 0.0
+        B = 1.0
+    elif 440 <= wavelength <= 490:
+        R = 0.0
+        G = (wavelength - 440) / (490 - 440)
+        B = 1.0
+    elif 490 <= wavelength <= 510:
+        R = 0.0
+        G = 1.0
+        B = -(wavelength - 510) / (510 - 490)
+    elif 510 <= wavelength <= 580:
+        R = (wavelength - 510) / (580 - 510)
+        G = 1.0
+        B = 0.0
+    elif 580 <= wavelength <= 645:
+        R = 1.0
+        G = -(wavelength - 645) / (645 - 580)
+        B = 0.0
+    else:
+        R = 1.0
+        G = 0.0
+        B = 0.0
+
+    # Adjust intensities for different parts of the spectrum
+    if 380 <= wavelength <= 420:
+        factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380)
+    elif 645 <= wavelength <= 750:
+        factor = 0.3 + 0.7 * (750 - wavelength) / (750 - 645)
+    else:
+        factor = 1.0
+
+    R *= factor
+    G *= factor
+    B *= factor
+
+    return (R, G, B)
+
 
 #%% alias_nasa_table_comp
 def alias_nasa_table_comp(key):

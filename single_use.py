@@ -141,6 +141,22 @@ def _create_folder_general(main_directory: str):
                 mode = 0o777,
                 exist_ok = True)
     os.makedirs(main_directory + '/' +
+                'figures/whitemode_normal',
+                mode = 0o777,
+                exist_ok = True)
+    os.makedirs(main_directory + '/' +
+            'figures/darkmode_normal',
+            mode = 0o777,
+            exist_ok = True)
+    os.makedirs(main_directory + '/' +
+            'figures/whitemode_presentation',
+            mode = 0o777,
+            exist_ok = True)
+    os.makedirs(main_directory + '/' +
+            'figures/darkmode_presentation',
+            mode = 0o777,
+            exist_ok = True)
+    os.makedirs(main_directory + '/' +
                 'saved_data',
                 mode = 0o777,
                 exist_ok = True)

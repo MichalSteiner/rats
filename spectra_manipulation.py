@@ -9,7 +9,6 @@ Created on Mon Sep  6 13:34:34 2021
 import specutils as sp
 import astropy
 import numpy as np
-from functools import singledispatch
 import rats.parameters as para
 import rats.spectra_manipulation_subroutines.calculation as smcalc
 import astropy.units as u
@@ -108,8 +107,8 @@ def execute_mask_in_list(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
 
 
 #%% custom_transmission_units
-def custom_transmission_units(sys_para: para.SystemParametersComposite
-                              ) -> tuple[u.Equivalency, u.Unit, u.Unit, u.Unit, u.Unit, u.Unit]:
+def custom_transmission_units(system_parameters: para.SystemParametersComposite
+                              ) -> [u.Equivalency, u.Unit, u.Unit, u.Unit, u.Unit, u.Unit]:
     """
     Defines transmission spectrum specific units for given planet. Conversion equations are available at https://www.overleaf.com/read/gkdtkqvwffzn
 
@@ -120,24 +119,24 @@ def custom_transmission_units(sys_para: para.SystemParametersComposite
 
     Returns
     -------
-    tuple[Equivalency, Unit, Unit, Unit, Unit, Unit]
-        equivalency : Equivalency
-            Equivalency between the unit system (see below definitions).
-        F_lam : Unit
-            Standard way of representing transmission spectrum as (1- atmospheric absorption).
-        R : Unit
-            Atmospheric absorption only. No signal should be centered at 0, absorption signal should go up.
-        R_plam : Unit
-            Absorption in units of planetary radius. No atmosphere should be centered at Rp value, atmospheric signal is aiming up
-        delta_lam : Unit
-            Transit depth like units. No atmosphere should be centered at transit depth (delta) value (represented as number, not percentage). Atmospheric signal is aiming up.
-        H_num : Unit
-            Number of atmospheric scale heights
+    equivalency : Equivalency
+        Equivalency between the unit system (see below definitions).
+    F_lam : u.Unit
+        Standard way of representing transmission spectrum as (1- atmospheric absorption).
+    R : u.Unit
+        Atmospheric absorption only. No signal should be centered at 0, absorption signal should go up.
+    R_plam : u.Unit
+        Absorption in units of planetary radius. No atmosphere should be centered at Rp value, atmospheric signal is aiming up
+    delta_lam : u.Unit
+        Transit depth like units. No atmosphere should be centered at transit depth (delta) value (represented as number, not percentage). Atmospheric signal is aiming up.
+    H_num : u.Unit
+        Number of atmospheric scale heights
 
     """
     # Constants for given system
-    Rp, Rs = sys_para.planet.radius, sys_para.star.radius
-    H = (sys_para.planet.H) # In km
+    Rp, Rs = system_parameters.Planet.radius.data * system_parameters.Planet.radius.unit, system_parameters.Star.radius.data * system_parameters.Star.radius.unit
+    system_parameters._calculate_atmospheric_scale_height()
+    H = (system_parameters.Planet.atmospheric_scale_height.convert_unit_to(u.km).data) # In km
     rat = (Rs/Rp).decompose().value # There is a rat in my code, oh no!
     Rp_km = Rp.to(u.km).value # Planet radius in km
     
@@ -146,9 +145,6 @@ def custom_transmission_units(sys_para: para.SystemParametersComposite
     R = u.def_unit(['','R','Excess atmospheric absorption', 'A'])
     R_plam =  u.def_unit(['Rp','Planetary radius'])
     delta_lam =  u.def_unit(['','Wavelength dependent transit depth'])
-    
-    # TODO:
-        # Implement scale heights units
     H_num =  u.def_unit(['','Number of scale heights'])
     
     equivalency_transmission = u.Equivalency(
@@ -450,32 +446,6 @@ def get_sublist(spectrum_list: sp.SpectrumList,
             if item.meta[key] == value:
                 new_spectrum_list.remove(item)
     return new_spectrum_list
-#%% prepare_const_spec
-def prepare_const_spec(spec,num,unit=u.dimensionless_unscaled):
-    """
-    Prepares a constant spectrum with spectrl_axis of spec of the value num*unit
-
-    Parameters
-    ----------
-    spec : sp.Spectrum1D
-        Spectrum from which to take spectral_axis.
-    num : float
-        Value of the flux.
-    unit : Unit, optional
-        Unit of the flux spectrum. The default is u.dimensionless_unscaled.
-
-    Returns
-    -------
-    con_spec : sp.Spectrum1D
-        Output constant spectrum.
-
-    """
-    # CLEANME
-    # TODO Check this is necessary anyway
-    con_spec = sp.Spectrum1D(spectral_axis = spec.spectral_axis,
-                             flux =[num]*len(spec.spectral_axis)*unit,
-                             )
-    return con_spec
 
 
 #%% binning_spectrum
@@ -499,14 +469,17 @@ def binning_spectrum(spectrum: sp.Spectrum1D,
         y values of the binned spectrum.
     y_err
         y_err values of the binned spectrum.
-
+    
     """
-    # CLEANME
-    # TESTME check this hasn't been changed
+    
     num_bins = round(spectrum.spectral_axis.shape[0] / bin_factor)
-    x = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.spectral_axis, statistic='mean', bins=num_bins)
-    y = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.flux, statistic='mean', bins=num_bins)
-    y_err = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.uncertainty.array, statistic=smcalc._error_bin, bins=num_bins)
+    
+    x = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.spectral_axis, statistic=np.nanmean, bins=num_bins)
+    
+    y = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.flux, statistic=np.nanmean, bins=num_bins)
+    
+    y_err = sci.stats.binned_statistic(spectrum.spectral_axis, spectrum.uncertainty.array, statistic= smcalc._error_bin, bins=num_bins)
+    # Shouldn't this be returned as spectrum? On one side, it makes more sense to return it as sp.Spectrum1D, on other, it will be tricky to use rebinning animations as such. 
     return x.statistic,y.statistic,y_err.statistic
 
 #%% shift_spectrum
@@ -537,7 +510,7 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
     # Combine the mask arrays of flux and errors
     mask_flux = ~np.isfinite(spectrum.flux)
     mask_err = ~np.isfinite(spectrum.uncertainty.array)
-    mask = np.ma.mask_or(mask_flux, mask_err)
+    mask = np.logical_or(mask_flux, mask_err)
 
     # Interpolation function for flux - cubic spline with no extrapolation
     interpolate_flux = sci.interpolate.CubicSpline(new_x_axis[~mask],
@@ -629,14 +602,15 @@ def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D,
         New spectrum interpolated to given spectral_axis
     """
     # Don't run when the spectrum already has the desired spectral axis.
-    if (spectrum.spectral_axis == new_spectral_axis).all(): 
-        logger.debug('Skipping interpolation as the desired spectral axis is the same as of the spectrum.')
-        return spectrum
+    if len(spectrum.spectral_axis) == len(new_spectral_axis):
+        if (spectrum.spectral_axis == new_spectral_axis).all(): 
+            logger.debug('Skipping interpolation as the desired spectral axis is the same as of the spectrum.')
+            return spectrum
     
     # Combine the mask arrays of flux and errors
     mask_flux = ~np.isfinite(spectrum.flux)
     mask_err = ~np.isfinite(spectrum.uncertainty.array)
-    mask = np.ma.mask_or(mask_flux, mask_err)
+    mask = np.logical_or(mask_flux, mask_err)
     
     flux_interpolate = sci.interpolate.CubicSpline(
         spectrum.spectral_axis[~mask],
@@ -793,7 +767,7 @@ def binning_list(spectrum_list: sp.SpectrumList,
                 interpolate2commonframe(spectrum,
                                         new_spectral_axis= new_spectral_axis)
             )
-            logger.debug(f'Interpolated spectrum number {spectrum.meta["spec_num"]} on common frame')
+            logger.debug(f'Interpolated spectrum number {spectrum.meta["Spec_num"]} on common frame')
             
     return new_spectrum_list
 
@@ -801,6 +775,11 @@ def binning_list(spectrum_list: sp.SpectrumList,
 def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                        quantile: float=.85,
                        polyfit: None | int = None) -> sp.Spectrum1D | sp.SpectrumCollection:
+    # CLEANME
+    # TESTME
+    # DOCUMENTME
+    
+    
     if (polyfit is None and # Polynomial fit not requested
         type(spectrum) == sp.Spectrum1D and # Is a 1D spectrum
         len(spectrum.spectral_axis) > 10000): # Is longer than 10000 pixels
@@ -871,6 +850,7 @@ def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
     return normalized_spectrum
 
 #%% normalize_list
+@time_function
 @progress_tracker
 @save_and_load
 def normalize_list(spectrum_list: sp.SpectrumList,
@@ -929,7 +909,7 @@ def normalize_list(spectrum_list: sp.SpectrumList,
 
 #%% replace_flux_units_transmission
 @save_and_load
-def replace_flux_units_transmission(spec_list, unit,force_load = False, force_skip= False, pkl_name = ''):
+def replace_flux_units_transmission(spec_list, unit, force_load = False, force_skip= False, pkl_name = ''):
     """
     Replace the flux units in the transmission spectra
 
@@ -1004,7 +984,7 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
                           pkl_name: str = ''
                           ) -> sp.SpectrumList:
     """
-    Calculates list of masters for the full dataset. The type of master is defined by key, value, sn_type and method used.
+    Calculates list of masters for the full dataset. The type of master is defined by key, value, sn_type and method used. Ea
 
     Parameters
     ----------
@@ -1031,8 +1011,9 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
         List of master spectra made for each night [ind == 1...n] and nights combined [ind == 0].
     """
     
-    
-    # DOCUMENTME
+        
+    # FIXME Should have a division on different instruments
+    # TODO: The master_all spectrum could have multiple spectra inside the spectrum1D/ spectrumCollection to include different instruments.
     # CLEANME
     # Warning for non-normalized spectra
     if (spectrum_list[0].meta['normalization'] == False) & (key is not None):
@@ -1051,12 +1032,9 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
     spectrum_type = smcalc._get_spectrum_type(key= key,
                                              value= value)
     smcalc._check_night_ordering(spectrum_list)
+    
     number_of_nights = sublist[-1].meta['Night_num']
 
-    
-    # FIXME Should have a division on different instruments
-    # IDEA: The master_all spectrum could have multiple spectra inside the spectrum1D/ spectrumCollection to include different instruments.
-    
     # Master of nights combined
     master_list = sp.SpectrumList()
     master_all = smcalc._calculate_master(sublist,
@@ -1491,6 +1469,7 @@ def shift_list(spectrum_list:sp.SpectrumList,
                                             #   repeat(linfit)
                                               )
                         )
+        new_spectrum_list = sp.SpectrumList(new_spectrum_list)
         logger.warning('Finished multiprocessing')
     else:
         new_spectrum_list = sp.SpectrumList()
@@ -1505,24 +1484,31 @@ def shift_list(spectrum_list:sp.SpectrumList,
     return new_spectrum_list
 #%% sort_spec_list
 @skip_function
-def sort_spec_list(spec_list,force_skip=False):
+def sort_spectrum_list(spectrum_list:sp.SpectrumList,
+                       force_skip=False) -> sp.SpectrumList:
     """
-    Sorts spectrum list based on BJD time observation in case the order got mingled
+    Sorts spectrum list by BJD time located in the meta['BJD'] of each spectrum
     
-    Input:
-        spec_list ; sp.SpectrumList - spectrum list to order
-    Output:
-        new_spec_list ; sp.SpectrumList - spectrum list ordered by BJD
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to sort.
+    force_skip : bool, optional
+        Whether to force skipping, by default False
+
+    Returns
+    -------
+    sorted_spectrum_list : sp.SpectrumList
+        Sorted spectrum list.
     """
     bjd = []
-    for item in spec_list:
+    for item in spectrum_list:
         bjd.append(item.meta['BJD'].value)
     ind = np.argsort(bjd)
-    new_spec_list = sp.SpectrumList()
-    for number,ii in enumerate(ind):
-        new_spec_list.append(spec_list[ii])
-        new_spec_list[number].meta['spec_num'] = number
-    return new_spec_list
+    sorted_spectrum_list = sp.SpectrumList()
+    for new_index, spectrum_index in enumerate(ind):
+        sorted_spectrum_list.append(spectrum_list[spectrum_index])
+    return sorted_spectrum_list
 #%% extract_average_uncertainty_from_region
 def extract_average_uncertainty_from_region(spec,line_list,diff_unc=1*u.AA):
     """
@@ -1606,6 +1592,7 @@ def velocity_fold(spec_list,line_list,constraint=[-100,100]*u.km/u.s):
             )
     return spec_list_velocity, new_spectrum
 #%% RM_simulation
+@disable_func
 def RM_simulation(spec_list,master_RF_star_oot,sys_para):
     """
     Simulates the RM effect on the TS using the out-of-transit spectra and stellar local velocities. It is not very good at high stellar local velocities
@@ -1647,135 +1634,3 @@ def RM_simulation(spec_list,master_RF_star_oot,sys_para):
     # Calculate master in transit
     In_transit = smcalc._calculate_master(RM_simulated,sn_type = 'quadratic_combined')
     return RM_simulated,In_transit
-
-#%% non_scaled2RpRssquare
-def non_scaled2RpRssquare(spectrum,sys_para):
-    """
-    Rescaling the unscaled transmission spectrum (1-delta) to RpRs**2
-    Input:
-        spectrum ; sp.Spectrum1D - spectrum to rescale
-        sys_para ; para.system_parameters_class - system parameters
-    Output:
-        rescaled_spectrum ; sp.Spectrum1D - spectrum rescaled to RpRs**2
-    """
-    reversed_spectrum = spectrum.multiply(-1*u.dimensionless_unscaled,handle_meta = 'first_found',handle_mask = 'first_found')
-    reversed_add_1 = reversed_spectrum.add(1*u.dimensionless_unscaled,handle_meta = 'first_found',handle_mask = 'first_found')
-    multiply_rprssquare = reversed_add_1.multiply((sys_para.planet.radius**2 / sys_para.star.radius**2).decompose()*u.dimensionless_unscaled
-        ,handle_meta = 'first_found',handle_mask = 'first_found')
-    rescaled_spectrum = multiply_rprssquare.divide((sys_para.transit.delta*0.01)*u.dimensionless_unscaled
-        ,handle_meta = 'first_found',handle_mask = 'first_found')
-    return rescaled_spectrum
-
-#%% norm2RlamRp
-def norm2RlamRp(flux,sys_para):
-    """
-    Rescaling normalized flux to R_lambda / R_p
-    Latex equation:
-        \frac{R_\lambda}{R_p} = \frac{R_s}{R_p}\sqrt{1-F_\lambda + \frac{R_p^2}{R_s^2}F_\lambda}
-    """
-    return (sys_para.star.radius/sys_para.planet.radius).decompose() * np.sqrt(1- flux + (sys_para.planet.radius**2/sys_para.star.radius**2).decompose()*flux)
-
-#%% norm2RlamRssquare
-def norm2RlamRssquare(flux,sys_para):
-    """
-    Rescaling normalized flux to R_lambda / R_star squared
-    """
-    return 1- flux + (sys_para.planet.radius**2/sys_para.star.radius**2).decompose()*flux
-#%% square_root
-def square_root(flux,uncertainty):
-    """
-    Calculates square root and uncertainty of flux
-    """
-    new_flux = np.sqrt(flux)
-    new_uncertainty = (1/2 * uncertainty.array/flux) *new_flux
-    
-    return new_flux,new_uncertainty
-
-#%%
-def spec_norm2RlamRp(spectrum,sys_para):
-    """
-    Rescaling the spectrum to R_lambda / R_p_wlc from normalized spectrum
-    Latex equation:
-        \frac{R_\lambda}{R_p} = \sqrt{\frac{R_s}{R_p}-\frac{R_s}{R_p}F_\lambda + F_\lambda}
-    
-    Input:
-        spectrum ; sp.Spectrum1D - spectrum to rescale
-        sys_para ; para.system_parameters_class - system parameters
-        
-    Output:
-        rescaled_spectrum ; sp.Spectrum1D - spectrum rescaled to R_lambda / R_p_wlc
-    """
-    
-    term_in_sqrt_flux = spectrum.multiply( # Terms with F_\lambda
-        (1-(sys_para.planet.radius**2/sys_para.star.radius**2).decompose())
-        )
-    
-    term_in_sqrt = term_in_sqrt_flux.add((sys_para.planet.radius**2/sys_para.star.radius**2).decompose())
-    new_flux,new_uncertainty = square_root(term_in_sqrt.flux,term_in_sqrt.uncertainty)
-    
-    new_spectrum = sp.Spectrum1D(
-        spectral_axis= spectrum.spectral_axis,
-        flux = new_flux,
-        uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty),
-        meta = spectrum.meta.copy(),
-        mask = np.isnan(new_flux)
-        )
-    return new_spectrum
-#%%
-def RpRs2Rp(x,sys_para):
-    return np.sign(x)*np.sqrt(np.sign(x)*x)*(sys_para.star.radius / sys_para.planet.radius).decompose()
-
-def Rp2RpRs(x,sys_para):
-    return (np.sign(x)*x/(sys_para.star.radius / sys_para.planet.radius).decompose())**2
-
-#%% spec_norm2RlamRssquare
-def spec_norm2RlamRssquare(spectrum,sys_para):
-    """
-    Rescaling the spectrum to R_lambda / R_p_wlc from normalized spectrum
-    Latex equation:
-        \frac{R_\lambda^2}{R_s^2} = 1-F_\lambda + F_\lambda \frac{R_p^2}{R_s^2}
-    
-    Input:
-        spectrum ; sp.Spectrum1D - spectrum to rescale
-        sys_para ; para.system_parameters_class - system parameters
-        
-    Output:
-        rescaled_spectrum ; sp.Spectrum1D - spectrum rescaled to R_lambda / R_p_wlc
-    """
-    
-    tmp_spec = prepare_const_spec(spectrum, -1*u.dimensionless_unscaled)
-    first_term = spectrum.multiply( # Terms with F_\lambda
-        tmp_spec
-        )
-    
-    tmp_spec = prepare_const_spec(spectrum,(sys_para.planet.radius**2/sys_para.star.radius**2).decompose())
-    second_term = spectrum.multiply(
-        tmp_spec
-        )
-    
-    tmp_spec = prepare_const_spec(first_term, 1*u.dimensionless_unscaled)
-    new_spectrum = first_term.add(second_term).add(tmp_spec)
-    new_spectrum = replace_spectral_axis(new_spectrum, spectrum.spectral_axis)
-    return new_spectrum
-
-#%% lost_planetary_signal
-def lost_planetary_signal(sr_region,spec_list):
-    """
-    Calculate fraction of lost (NaN) pixels in spectral region 
-    """
-    # TODO - Rewrite
-    num_pixels = 0
-    num_pixels_lost = 0
-
-    for item in spec_list:
-        region_spec = extract_region_in_spectrum(item, sr_region)
-        try:
-            num_pixels += len(region_spec.flux)
-            num_pixels_lost += sum(np.isnan(region_spec.flux))
-        except:
-            for subspec in region_spec:
-                num_pixels += len(subspec.flux)
-                num_pixels_lost += sum(np.isnan(subspec.flux))
-    print('Lost signal:',num_pixels_lost/num_pixels)
-    
-    return num_pixels_lost/num_pixels

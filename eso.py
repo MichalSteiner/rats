@@ -225,7 +225,26 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
 def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList):
     #TODO Implement CCF
     raise NotImplementedError("Not implemented yet")
-
+    
+    # for key in fits_hdulist[0].header.keys():
+    #     if key.startswith('ESO PRO REC1 PARAM') and key.endswith('NAME'):
+    #         if fits_hdulist[0].header[key] == 'rv_center'
+    #         if fits_hdulist[0].header[key] == 'rv_range'
+    #         if fits_hdulist[0].header[key] == 'rv_step'
+            
+            
+    
+    # spectrum = sp.Spectrum1D(
+    #     spectral_axis = ,
+    #     flux = ,
+    #     uncertainty = ,
+    #     meta= ,
+    #     mask = ,
+    # )
+    
+    
+    
+    
     return
   
 #%% Load all spectra from project
@@ -424,7 +443,7 @@ class _Fiber(Enum):
     B = ['B', 'Fiber_B']
 
 #%%
-def _numbering_nights(spectrum_list:sp.SpectrumList):
+def _numbering_nights(spectrum_list: sp.SpectrumList):
     """
     Index spectrum list with Night indices (start = 1), Spectrum indices within single night (start = 1) and spectra indices (start = 1)
 

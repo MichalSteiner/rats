@@ -2,7 +2,7 @@ from itertools import pairwise
 import specutils as sp
 import numpy as np
 import astropy
-from astropy.nddata import StdDevUncertainty, NDDataRef
+from astropy.nddata import StdDevUncertainty, NDDataRef, NDDataArray
 import astropy.units as u
 from rats.utilities import default_logger_format
 import logging
@@ -147,7 +147,7 @@ def _error_bin(array: np.ndarray | list) -> float:
         array = np.asarray(array)
     # For arrays longer than 1 value
     if len(array) != 1:
-        value = np.sqrt(np.sum(array**2)/(len(array))**2)
+        value = np.sqrt(np.nansum(array**2)/(sum(np.isfinite(array)))**2)
     else:
         value = array[0]
         
@@ -374,9 +374,21 @@ def _calculate_mean_master(spectrum_list: sp.SpectrumList,
     master : sp.Spectrum1D
         Average master spectrum.
     """
+    
     for spectrum in spectrum_list:
         weights = _gain_weights(spectrum= spectrum,
                                 sn_type= sn_type)
+        
+        # Handles masked and NaNs values in the spectrum
+        weights.mask = np.logical_or(np.isnan(spectrum.flux),
+                             np.isnan(spectrum.uncertainty.array)
+                             )
+        weights = _execute_mask_in_spectrum(weights)
+        weights = _remove_NaNs_with_constant(weights, constant= 0)
+        
+        spectrum = _execute_mask_in_spectrum(spectrum)
+        spectrum = _remove_NaNs_with_constant(spectrum, constant= 0)
+
         master = master.add(spectrum.multiply(weights))
         weight_sum = weight_sum.add(weights)
         
@@ -517,6 +529,7 @@ def _gain_weights(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
     weights : sp.Spectrum1D | astropy.nddata.NDDataRef
         Weights for the spectrum. If spectrum collection is used, a NDDataRef object is passed back, as the calculation is done on this object instead of the collections themselves. This is to avoid slow for-looping over orders.
     """
+    # Change this to exclude NaNs
     if type(spectrum) == sp.SpectrumCollection:
         weights = NDDataRef(
             data = np.ones_like(spectrum.flux.value)
@@ -543,6 +556,56 @@ def _gain_weights(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
             weights = weights.multiply(spectrum.meta['delta']**2 * u.dimensionless_unscaled)
     
     return weights
+
+def _gain_weights_list(spectrum_list: sp.SpectrumList,
+                       sn_type: str | None = None) -> astropy.nddata.NDDataArray:
+    """
+    Generate weight spectrum for the master calculation.
+
+    Parameters
+    ----------
+    spectrum : sp.SpectrumList
+        Spectrum list with either sp.Spectrum1D or sp.SpectrumCollection objects.
+    sn_type : str | None
+        Type of weighting, by default None.
+        Options are:
+            None:
+                No weights assumed
+            'Average_S_N':
+                Weights are scaled by average SNR.
+            'quadratic':
+                Weights are scaled by average SNR**2
+            'quadratic_error':
+                Weights are scaled by flux_error ** 2.
+            'quadratic_combined':
+                Weights are scaled by flux_error ** 2 * delta(phase) ** 2
+                Delta is the time dependent transit depth.
+            
+    Returns
+    -------
+    weights : astropy.nddata.NDDataArray
+        Weights for the spectrum list.
+    """
+    weights = NDDataArray(data = ([np.isfinite(item.flux) for item in spectrum_list]))
+    
+    # TESTME
+    match sn_type:
+        case None:
+            return weights
+        case 'Average_S_N':
+            scale = [item.meta['Average_S_N'] for item in spectrum_list]* u.dimensionless_unscaled
+        case 'quadratic':
+            scale = [item.meta['Average_S_N']**2 for item in spectrum_list]* u.dimensionless_unscaled
+        case 'quadratic_error':
+            # TODO Check if this doesn't break for uncertainty = 0
+            scale = [item.uncertainty.array**2 for item in spectrum_list]* u.dimensionless_unscaled
+        case 'quadratic_combined':
+            scale = [item.uncertainty.array**2 for item in spectrum_list]* u.dimensionless_unscaled
+            scale *= [item.meta['delta']**2 for item in spectrum_list]* u.dimensionless_unscaled
+    weights = weights.multiply(scale, axis=0)
+    
+    return weights
+
 
 def _empty_spectrum_like(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                          constant: float | int = 0,

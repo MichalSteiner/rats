@@ -7,6 +7,7 @@ import logging
 from rats.utilities import default_logger_format
 import rats.ndarray_utilities as ndutils
 import numpy as np
+import matplotlib.pyplot as plt
 #%% Setting up logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
@@ -89,19 +90,35 @@ class CalculationSystem:
         """
         Calculate the gravity acceleration at the planetary surface
         """
-        self.Planet._calculate_gravity_acceleration
+        self.Planet._calculate_gravity_acceleration()
         return
     
     def _calculate_atmospheric_scale_height(self):
         """
         Calculate the gravity acceleration at the planetary surface
         """
-        self.Planet._calculate_atmospheric_scale_height
+        self.Planet._calculate_atmospheric_scale_height()
         return
+    
+    def stellar_model(self) -> sp.Spectrum1D:
+        """
+        Generate stellar model using expecto (wrapper for PHOENIX library).
+
+        Parameters
+        ----------
+        vacuum : bool, optional
+            Whether to return stellar spectrum with vacuum wavelength, by default False. If False, returns wavelength in air.
+
+        Returns
+        -------
+        stellar_model : sp.Spectrum1D
+            Stellar model extracted using expecto
+        """
+        return self.Star.stellar_model()
     
     def _calculate_TSM(self):
         #TODO
-        logger.info('Calculation of gravity acceleration:')
+        logger.info('Calculation of TSM:')
         
         logger.info('')
         
@@ -519,6 +536,21 @@ class CalculationTransitLength:
         self.Ephemeris.contact_T3 = T23.divide(P)
         self.Ephemeris.contact_T4 = T14.divide(P)
         
+        
+        return
+    
+    def plot_contact_points(self,
+                            ax: plt.Axes,
+                            ls='--',
+                            color_full= 'darkgreen',
+                            color_partial= 'goldenrod',
+                            ):
+        # DOCUMENTME
+        ax.axhline(self.Ephemeris.contact_T1.value, ls=ls, color= color_partial)
+        ax.axhline(self.Ephemeris.contact_T2.value, ls=ls, color=color_full)
+        ax.axhline(self.Ephemeris.contact_T3.value, ls=ls, color=color_full)
+        ax.axhline(self.Ephemeris.contact_T4.value, ls=ls, color=color_partial)
+
         return
     
     def _find_transit(self,
@@ -675,3 +707,33 @@ class EquivalenciesTransmission:
             "Transmission",
         )
         return
+    
+    
+    
+class StellarModel():
+    def stellar_model(self,
+                      vacuum= False) -> sp.Spectrum1D:
+        """
+        Generate stellar model using expecto (wrapper for PHOENIX library).
+
+        Parameters
+        ----------
+        vacuum : bool, optional
+            Whether to return stellar spectrum with vacuum wavelength, by default False. If False, returns wavelength in air.
+
+        Returns
+        -------
+        stellar_model : sp.Spectrum1D
+            Stellar model extracted using expecto
+
+        """
+        
+        from expecto import get_spectrum
+        
+        stellar_spectrum = get_spectrum(
+            T_eff=self.temperature.data,
+            log_g=self.logg.data,
+            cache=True,
+            vacuum= vacuum
+            )
+        return stellar_spectrum
