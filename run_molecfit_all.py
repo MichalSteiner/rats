@@ -925,6 +925,6 @@ def run_molecfit_all(main_directory: str,
                 run_noninteractive= run_noninteractive
             )
         else:
-            logger.info(f'Ignoring direcotry {subdir}')
+            logger.debug(f'Ignoring direcotry {subdir}')
         
     return

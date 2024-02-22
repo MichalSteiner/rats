@@ -31,7 +31,7 @@ import specutils as sp
 import os
 from enum import Enum
 import logging
-from rats.utilities import time_function, save_and_load, progress_tracker, skip_function, disable_func, default_logger_format, todo_function
+from rats.utilities import time_function, save_and_load, progress_tracker, skip_function, disable_func, default_logger_format
 
 #%% Setting up logging
 logger = logging.getLogger(__name__)
@@ -221,7 +221,6 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     return spectrum
 
 #%% Load CCF spectrum
-@todo_function
 def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList):
     #TODO Implement CCF
     raise NotImplementedError("Not implemented yet")

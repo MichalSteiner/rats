@@ -1,6 +1,7 @@
 #%% Importing libraries
 import astropy.constants as con
 import astropy.units as u
+import astropy
 import specutils as sp
 from astropy.nddata import NDData, StdDevUncertainty, NDDataArray
 import logging
@@ -173,7 +174,12 @@ class CalculationSystem:
             Velocity of the star
         """
         
-        omega = self.Planet.argument_of_periastron.convert_unit_to(u.rad)
+        if np.isnan(self.Planet.argument_of_periastron):
+            omega = NDDataArray(90*u.deg, uncertainty = StdDevUncertainty(0))
+            omega = omega.convert_unit_to(u.rad)
+        else:
+            omega = self.Planet.argument_of_periastron.convert_unit_to(u.rad)
+        
         keplerian_semiamplitude = self.Planet.keplerian_semiamplitude.convert_unit_to(u.m/u.s)
         eccentricity = self.Planet.eccentricity
         eccentricity = NDDataArray(eccentricity.data, uncertainty = StdDevUncertainty(eccentricity.uncertainty.array))
@@ -194,6 +200,8 @@ class CalculationSystem:
         # (np.cos(true_anomaly+omega) + sys_para.planet.e * np.cos(omega))
         return stellar_velocity
     
+    
+    
     def _calc_true_anom(self, phase: float | NDDataArray) -> NDDataArray:
         """
         Calculates true anomaly of the orbit at certain phase.
@@ -208,14 +216,17 @@ class CalculationSystem:
         true_anomaly : NDDataArray
             Calculated true anomaly.
         """
-        #CLEANME
+
         import math
         from scipy.optimize import newton
-        
+        if np.isnan(self.Planet.argument_of_periastron):
+            omega = NDDataArray(90*u.deg, uncertainty = StdDevUncertainty(0))
+            omega = omega.convert_unit_to(u.rad)
+        else:
+            omega = self.Planet.argument_of_periastron.convert_unit_to(u.rad)
         eccentricity = self.Planet.eccentricity
-        omega = self.Planet.argument_of_periastron.convert_unit_to(u.rad)
         
-        if type(phase) == float:
+        if type(phase) != NDDataArray:
             phase = NDDataArray(phase, uncertainty = StdDevUncertainty(0))
         
         #Circular orbit
@@ -273,7 +284,7 @@ class CalculationSystem:
             #Mean anomaly
             #  - time origin of t_mean at the periapsis (t_mean=0 <-> M=0 <-> E=0)
             #  - M(t_mean)=M(dt_transit)+M(t_simu)
-            mean_anom = NDDataArray(2*np.pi*u.rad).multiply(phase).add(mean_anomaly_TR)
+            mean_anomaly = NDDataArray(2*np.pi*u.rad).multiply(phase).add(mean_anomaly_TR)
             # mean_anom=2.*np.pi* phase*u.rad +mean_anomaly_TR
 
             #Eccentric anomaly :
@@ -284,8 +295,8 @@ class CalculationSystem:
             #the major axis through the planet position
             eccentricity_anomaly = newton(
                 _Kepler_func,
-                mean_anom.data,
-                args= (mean_anom.data, eccentricity) )
+                mean_anomaly.data,
+                args= (mean_anomaly.data, eccentricity) )
 
             eccentricity_anomaly = NDDataArray(eccentricity_anomaly * u.rad, uncertainty = StdDevUncertainty(0))
             
@@ -294,17 +305,14 @@ class CalculationSystem:
                 NDDataArray(1).subtract(eccentricity)
                 ),
                                                   (1/2)
-                                                  )
-            
-            true_anomaly = NDDataArray(2).multiply(
-                ndutils._arctan_NDDataArray(arctan_2_term).multiply(
+                                                  ).multiply(
                 ndutils._tan_NDDataArray(
                     eccentricity_anomaly.divide(NDDataArray(2))
                                          )
-                ))
-            # FIXME make sure this implementation is correct.
-            logger.critical('Calculation of Keplerian velocity using eccentric orbit. Please double-check the output is correct.')
+                )
             
+            true_anomaly = NDDataArray(2).multiply(
+                ndutils._arctan_NDDataArray(arctan_2_term))
             
             # true_anomaly=2.*np.arctan(np.sqrt((1.+sys_para.planet.e)/(1.-sys_para.planet.e)) * np.tan(eccentricity_anomaly_TR/2.)) *u.rad
             
@@ -531,10 +539,10 @@ class CalculationTransitLength:
         T23 = self.Ephemeris.transit_length_full.convert_unit_to(u.h)
         P = self.Ephemeris.period.convert_unit_to(u.h)
         
-        self.Ephemeris.contact_T1 = T14.divide(P).divide(NDDataArray(-1))
-        self.Ephemeris.contact_T2 = T23.divide(P).divide(NDDataArray(-1))
-        self.Ephemeris.contact_T3 = T23.divide(P)
-        self.Ephemeris.contact_T4 = T14.divide(P)
+        self.Ephemeris.contact_T1 = T14.divide(P).divide(NDDataArray(-1)).divide(NDDataArray(2))
+        self.Ephemeris.contact_T2 = T23.divide(P).divide(NDDataArray(-1)).divide(NDDataArray(2))
+        self.Ephemeris.contact_T3 = T23.divide(P).divide(NDDataArray(2))
+        self.Ephemeris.contact_T4 = T14.divide(P).divide(NDDataArray(2))
         
         
         return
@@ -545,11 +553,24 @@ class CalculationTransitLength:
                             color_full= 'darkgreen',
                             color_partial= 'goldenrod',
                             ):
-        # DOCUMENTME
-        ax.axhline(self.Ephemeris.contact_T1.value, ls=ls, color= color_partial)
-        ax.axhline(self.Ephemeris.contact_T2.value, ls=ls, color=color_full)
-        ax.axhline(self.Ephemeris.contact_T3.value, ls=ls, color=color_full)
-        ax.axhline(self.Ephemeris.contact_T4.value, ls=ls, color=color_partial)
+        """
+        Add contact points to given artist as horizontal line. 
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Artist to plot on
+        ls : str, optional
+            Linestyle of the contact point line, by default '--'
+        color_full : str, optional
+            Color of the contact points for T2 and T3 contact points, by default 'darkgreen'.
+        color_partial : str, optional
+            Color of the contact points for T1 and T4 contact points, by default 'goldenrod'
+        """
+        ax.axhline(self.Ephemeris.contact_T1.data, ls=ls, color= color_partial)
+        ax.axhline(self.Ephemeris.contact_T2.data, ls=ls, color= color_full)
+        ax.axhline(self.Ephemeris.contact_T3.data, ls=ls, color= color_full)
+        ax.axhline(self.Ephemeris.contact_T4.data, ls=ls, color= color_partial)
 
         return
     
@@ -631,6 +652,27 @@ class CalculationTransitLength:
             self._spectrum_is_transiting(spectrum= spectrum)
         return
     
+    
+    def _transit_model(self,
+                       start,
+                       end,
+                       number_of_steps):
+        import batman
+        params = batman.TransitParams()
+        
+        params.t0 = 0.                       #time of inferior conjunction
+        params.per = 1.                      #orbital period
+        params.rp = 0.1                      #planet radius (in units of stellar radii)
+        params.a = 15.                       #semi-major axis (in units of stellar radii)
+        params.inc = 87.                     #orbital inclination (in degrees)
+        params.ecc = 0.                      #eccentricity
+        params.w = 90.                       #longitude of periastron (in degrees)
+        params.limb_dark = "uniform"       #limb darkening model
+        t = np.linspace(start, end, number_of_steps)
+        m = batman.TransitModel(params, t)    #initializes model
+        flux = m.light_curve(params)          #calculates light curve
+        
+        return
     
 class EquivalenciesTransmission:
     
@@ -735,5 +777,20 @@ class StellarModel():
             log_g=self.logg.data,
             cache=True,
             vacuum= vacuum
+            )
+        
+        stellar_spectrum = sp.Spectrum1D(
+            spectral_axis= stellar_spectrum.spectral_axis,
+            flux = stellar_spectrum.flux,
+            uncertainty = StdDevUncertainty(
+                np.zeros_like(stellar_spectrum.flux)
+                ),
+            mask = np.zeros_like(stellar_spectrum.flux),
+            meta= {
+                'Type': 'Stellar model',
+                'Stellar type': self.stellar_type.data,
+                'Model': 'PHOENIX',
+                'Creation': 'expecto package',
+                },
             )
         return stellar_spectrum

@@ -412,7 +412,7 @@ class StellarModel:
         
         return
 #%%
-import rats.eso as eso
+import load.eso as eso
 import parameters_old as para
 import rats.single_use as su
 import rats.plot_spectra as ps

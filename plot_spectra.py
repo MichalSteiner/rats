@@ -22,7 +22,7 @@ import typing
 import pandas as pd
 import astropy.units as u
 import rats.spectra_manipulation as sm
-from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function,save_figure,todo_function
+from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function
 #%% Color_pallete
 color_pallete_dark = sns.color_palette("dark")
 color_pallete_pastel = sns.color_palette("pastel")

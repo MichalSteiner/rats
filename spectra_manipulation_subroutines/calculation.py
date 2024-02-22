@@ -290,6 +290,8 @@ def _calculate_master(
         Master spectrum from the spectrum_list
     """
     
+    # FIXME Change the implementation to work with NDDataArray instead
+    # CLEANME This can be simplified. 
     master = _empty_spectrum_like(spectrum_list[0],
                                   unit = spectrum_list[0].flux.unit)
     weight_sum = _empty_spectrum_like(spectrum_list[0],
@@ -299,13 +301,19 @@ def _calculate_master(
     
     for spectrum in spectrum_list:
         spectrum = _remove_NaNs_with_constant(spectrum)
+    # CLEANME - this can be simplified
     
     match (method, spectrum_format):
         case 'addition', _:
-            #TODO
-            logger.critical('Addition master is not implemented yet! Returning')
-            raise NotImplementedError
-            return
+            master = _calculate_addition_master(
+                spectrum_list= spectrum_list,
+                master= master,
+                spectrum_type= spectrum_type,
+                night= night,
+                num_night= num_night,
+                rf= rf,
+                sn_type= sn_type
+                )
         case 'median', _:
             #TODO
             logger.critical('Median master is not implemented yet! Returning')
@@ -336,6 +344,91 @@ def _calculate_master(
         case _, _:
             raise ValueError('Requested method is not valid.')
         
+    return master
+
+def _test_equality_of_spectral_axis(spectrum_list: sp.SpectrumList) -> bool:
+    """
+    Tests the equality of spectral axes in spectrum list. This is necessary for any mathematical operation on the spectrum list, like building master.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list on which to test the condition.
+
+    Returns
+    -------
+    bool
+        _description_
+    """
+    return np.asarray([(item1.spectral_axis ==
+                    item2.spectral_axis
+                    ).all() for item1, item2 in pairwise(spectrum_list)]
+                    ).all()
+    
+    
+
+def _calculate_addition_master(
+    spectrum_list: sp.SpectrumList,
+    master: sp.Spectrum1D | sp.SpectrumCollection,
+    spectrum_type: str = '',
+    night: str = '',
+    num_night: str = '',
+    rf: str = '',
+    sn_type: str | None = None,
+    ) -> sp.Spectrum1D | sp.SpectrumCollection:
+    """
+    Calculates master by addition.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to calculate master from.
+    master : sp.Spectrum1D | sp.SpectrumCollection
+        Base master spectrum empty-object prepared before-hand to hold the result
+    spectrum_type : str, optional
+        Which type of master is being calculated, by default ''
+    night : str, optional
+        For which night is the master calculated, by default ''
+    num_night : str, optional
+        What is the number of night for which the master has been calculated, by default ''
+    rf : str, optional
+        Rest frame in which the master is calculated, by default ''
+    sn_type : str | None, optional
+        Weighting option, by default None.
+
+    Returns
+    -------
+    master : sp.Spectrum1D | sp.SpectrumCollection
+        Calculated master. Format is the same as input master.
+    """
+    # Test equality of wavelength grid
+    assert _test_equality_of_spectral_axis(spectrum_list), 'Spectral axis is not same for the spectrum list'
+    spectral_axis = spectrum_list[0].spectral_axis
+    
+    weights = _gain_weights_list(spectrum_list, sn_type=sn_type)
+    
+    flux_array = astropy.nddata.NDDataArray(
+        data = [item.flux for item in spectrum_list],
+        uncertainty = astropy.nddata.StdDevUncertainty([(item.uncertainty.array) for item in spectrum_list]),
+        unit= spectrum_list[0].unit
+        )
+    flux_array = _remove_NaNs_with_constant_NDData(flux_array,
+                                                   constant=0)
+    weighted_flux = flux_array.multiply(weights)
+    
+    for item in weighted_flux:
+        master = master.add(item)
+
+    
+    master.meta = {
+        'rf': rf,
+        'num_night': num_night,
+        'night': night,
+        'sn_type': sn_type,
+        'method': 'addition',
+        'type': spectrum_type,
+        }
+    
     return master
 
 def _calculate_mean_master(spectrum_list: sp.SpectrumList,
@@ -383,6 +476,7 @@ def _calculate_mean_master(spectrum_list: sp.SpectrumList,
         weights.mask = np.logical_or(np.isnan(spectrum.flux),
                              np.isnan(spectrum.uncertainty.array)
                              )
+        # TODO: This is weird....
         weights = _execute_mask_in_spectrum(weights)
         weights = _remove_NaNs_with_constant(weights, constant= 0)
         
@@ -452,6 +546,34 @@ def _calculate_mean_master_collection(
     
     return master
 
+def _remove_NaNs_with_constant_NDData(input_data: astropy.nddata.NDDataArray,
+                                      constant: float = 0) -> astropy.nddata.NDDataArray:
+    """
+    Remove NaNs with a constant value from NDDataArray, by default 0. This is useful to handle NaNs propagation with master calculation (e.g., one bad pixel in single spectrum would propagate the NaN to a master spectrum, without this handling).
+
+    Parameters
+    ----------
+    input_data : astropy.nddata.NDDataArray
+        Input data to remove NaNs from.
+    constant : float, optional
+        Constant value to fill the NDData for, by default 0. Sensible values are 0's and 1's.
+
+    Returns
+    -------
+    astropy.nddata.NDDataArray
+        _description_
+    """
+    new_data = astropy.nddata.NDDataArray(
+        data = np.where(np.isfinite(input_data.data),
+                           input_data.data,
+                           constant) * input_data.unit,
+        uncertainty = astropy.nddata.StdDevUncertainty(
+            np.where(
+                np.isfinite(input_data.uncertainty.array),
+                input_data.uncertainty.array,
+                0))
+        )
+    return new_data
 
 #%%
 def _remove_NaNs_with_constant(spectrum: sp.Spectrum1D | sp.SpectrumCollection,

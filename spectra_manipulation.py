@@ -40,6 +40,18 @@ import logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
+def _sigma_clipping_spectrum(spectrum_list: sp.SpectrumList,
+                             num_of_sigma: float = 5,
+                             ) -> sp.SpectrumList:
+    
+    flux_array = astropy.nddata.NDDataArray([spectrum.flux for spectrum in spectrum_list])
+    new_flux = astropy.stats.sigma_clip(flux_array,
+                                        sigma= num_of_sigma,
+                                        axis=1)
+    
+    
+    return
+
 
 
 #%% Masking values below a flux threshold
@@ -260,7 +272,6 @@ def extract_region_in_spectrum(spectrum: sp.Spectrum1D,
         uncertainty = spectrum.uncertainty[ind],
         mask = spectrum.mask[ind].copy(),
         meta = spectrum.meta.copy(),
-        wcs = add_spam_wcs(1)
         )
     
     return cut_spectrum
@@ -630,6 +641,8 @@ def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D,
         warnings.simplefilter("ignore")
         new_uncertainty = np.sqrt(error_interpolate(new_spectral_axis)) # Interpolate on the old wave_grid
     
+    mask = _compare_masks(spectrum.spectral_axis, mask, new_spectral_axis)
+    
     # Masking values that were NaN
     new_flux[mask] = np.nan
     new_uncertainty[mask] = np.nan
@@ -641,7 +654,6 @@ def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D,
         uncertainty = new_uncertainty,
         meta = spectrum.meta.copy(),
         mask = mask,
-        wcs = spectrum.wcs,
         )
     return new_spectrum
 
@@ -718,6 +730,40 @@ def _interpolate2commonframe_2D(spectrum: sp.SpectrumCollection,
             )
     new_spectrum = sp.SpectrumCollection.from_spectra(order_list)
     return new_spectrum
+
+def _compare_masks(spectral_axis: sp.SpectralAxis,
+                   mask: np.ndarray,
+                   new_spectral_axis: sp.SpectralAxis) -> np.ndarray:
+    """
+    Utility function to create new mask for new spectral axis. This is necessary when interpolating on spectral axis of different length.
+
+    Parameters
+    ----------
+    spectral_axis : sp.SpectralAxis
+        Original spectral axis
+    mask : np.ndarray
+        Original mask for given spectral_axis
+    new_spectral_axis : sp.SpectralAxis
+        New spectral axis on which we interpolate.
+
+    Returns
+    -------
+    new_mask : np.ndarray
+        New mask as reshaped from input.
+    """
+    new_spectral_axis = sp.SpectralAxis(new_spectral_axis)
+    new_mask = np.zeros_like(new_spectral_axis.value, dtype= bool)
+    
+    for masked_pixel in spectral_axis[mask]:
+        ind = 0
+        while True: # FIXME Not optimal
+            if masked_pixel < new_spectral_axis.bin_edges[ind]:
+                ind += 1
+            else:
+                new_mask[ind] = True
+                break
+
+    return new_mask
 #%% binning_list
 @progress_tracker
 @skip_function
@@ -771,8 +817,66 @@ def binning_list(spectrum_list: sp.SpectrumList,
             
     return new_spectrum_list
 
-#%% normalize_spectrum
+#%%
 def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                            quantile: float = .85,
+                            polyfit: None | int = None,
+                            window_size: int = 7500) -> sp.Spectrum1D | sp.SpectrumCollection:
+    # DOCUMENTME
+    match polyfit:
+        case None:
+            normalized_spectrum = _normalize_spectrum_quantile(spectrum= spectrum,
+                                                               quantile= quantile,
+                                                               window_size= window_size)
+        case polynomial_order if isinstance(polyfit, int):
+            normalized_spectrum = _normalize_spectrum_polyfit(spectrum= spectrum,
+                                                              polynomial_order= polyfit)
+    return normalized_spectrum
+
+def _normalize_spectrum_polyfit(spectrum,
+                                polynomial_order: int) -> sp.Spectrum1D | sp.SpectrumCollection:
+    # TODO
+    return
+
+def _normalize_spectrum_quantile(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                                 quantile: float = .85,
+                                 window_size: int = 7500) -> sp.Spectrum1D | sp.SpectrumCollection:
+    # DOCUMENTME
+    # FIXME
+    if type(spectrum) == sp.SpectrumCollection:
+        raise NotImplementedError
+    old_flux = astropy.nddata.NDDataArray(data= spectrum.flux.value * u.dimensionless_unscaled,
+                                          uncertainty = astropy.nddata.StdDevUncertainty(spectrum.uncertainty.array))
+    
+    # Dealing with endianness of arrays for pandas
+    new_array = np.asarray(spectrum.flux.value)
+    if new_array.dtype.byteorder != '=':
+        new_array = new_array.byteswap().newbyteorder()
+    
+    normalization_function = pd.Series(new_array).rolling(window_size,
+                             min_periods=1,
+                             center=True).quantile(
+                                 quantile
+                                 )
+    
+    match type(spectrum):
+        case sp.Spectrum1D:
+            new_spectrum = sp.Spectrum1D(
+                spectral_axis= spectrum.spectral_axis, 
+                flux = old_flux.divide(normalization_function).data * u.dimensionless_unscaled,
+                uncertainty= astropy.nddata.StdDevUncertainty(old_flux.divide(normalization_function).uncertainty.array),
+                mask= spectrum.mask.copy(),
+                meta= spectrum.meta.copy(),
+            )
+        case sp.SpectrumCollection:
+            raise NotImplementedError
+        
+    new_spectrum.meta['normalization'] = True
+    return new_spectrum
+
+#%% normalize_spectrum
+@disable_func
+def normalize_spectrum_old(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                        quantile: float=.85,
                        polyfit: None | int = None) -> sp.Spectrum1D | sp.SpectrumCollection:
     # CLEANME
@@ -977,7 +1081,7 @@ def cosmic_correction_all(spec_list,force_load=False,force_skip=False):
 def calculate_master_list(spectrum_list: sp.SpectrumList,
                           key: None | str = None,
                           value: None | str = None,
-                          sn_type: None | str ='quadratic',
+                          sn_type: None | str = None,
                           method: str = 'average',
                           force_load: bool = False,
                           force_skip: bool = False,
@@ -1286,42 +1390,6 @@ def spec_list_mask_region(spec_list,sr):
         item = exciser_fill_with_nan(spec,sr)
         new_spec_list.append(item)
     return new_spec_list
-
-#%% flux2height
-@disable_func
-def flux2height_todo(spec_list,star_para):
-    """
-    Changes transmission spectrum to [R_p]
-    Input: 
-        spec_list ; sp.SpectrumList - list of spectra
-        star_para ; lb.Star_para - stellar parameters
-        
-    Output:
-        new_spec_list ; sp.SpectrumList - list of spectra scaled in [R_p]
-    """
-    new_spec_list = sp.SpectrumList()
-    
-    sp_ratio = (star_para.star.radius / star_para.planet.radius).decompose()
-    ps_ratio = (star_para.planet.radius / star_para.star.radius).decompose()
-    
-    for item in spec_list:
-        flux = item.flux.value
-        uncertainty = item.uncertainty.array
-        
-        new_flux = sp_ratio * np.sqrt(1 - flux + (ps_ratio)**2 * flux)
-        sqrt_inside = 1- flux + (ps_ratio)**2 * flux
-        
-        new_uncertainty = (((uncertainty)**2 + (uncertainty* (ps_ratio)**2)**2) * (1/2) / sqrt_inside)**(1/2) * sp_ratio * new_flux
-        new_spec_list.append(
-            sp.Spectrum1D(flux = new_flux,
-                             spectral_axis = item.spectral_axis,
-                             uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty),
-                             mask = item.mask.copy(),
-                             meta = item.meta.copy())
-                                 )
-    
-    return new_spec_list
-
 
 #%% extract_velocity_field
 def extract_velocity_field(spectrum:sp.Spectrum1D,

@@ -13,3 +13,6 @@
 
 # Saved data from tests
 saved_data/*
+
+# Logs
+*.log

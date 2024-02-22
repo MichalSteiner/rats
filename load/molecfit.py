@@ -12,51 +12,41 @@ import astropy.units as u
 import specutils as sp
 import os as os
 import astropy
-import rats.eso as eso
+import rats.load.eso as eso
 import rats.spectra_manipulation as sm
-from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function, todo_function, default_logger_format
+from rats.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function, default_logger_format
 import logging
 
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
-
-#%% molec_fit_table_fits
-def molec_fit_table_fits(spec_coll):
-    '''
-    Creates a table.fits file compatible with molecfit
-    Input:
-        spectrum ; sp.Spectrum1D - spectrum to correct for
-    Output:
-        Creates in specified directory table.fits file that is compatible with molecfit
-    '''
-    for ii in range(len(spec_coll)):
-        spectrum = spec_coll[ii]
-        name = spectrum.meta['file_fiber_A']
-        name_directory = name[:name.find('raw')]
-        os.makedirs(name_directory  + 'molecfit_input/'+'%i'%(ii), mode = 0o777, exist_ok = True) 
-        os.makedirs(name_directory  + 'molecfit_output/'+'%i'%(ii), mode = 0o777, exist_ok = True) 
-        header = spectrum.meta['header']
-        flux_data = spectrum.flux.value
-        err_data = spectrum.uncertainty.array
-        wavelength = spectrum.spectral_axis.value
-        wave_data = fits.Column(name='wavelength', format = '1D', array = wavelength)
-        flux_data = fits.Column(name='flux',format = '1D', array = flux_data)
-        err_data = fits.Column(name='err_flux', format = '1D', array = err_data)
-        cols = fits.ColDefs([wave_data, flux_data, err_data])
-        t = fits.BinTableHDU.from_columns(cols)
-        prihdr = fits.Header(copy=True)
-        prihdr =  header
-        prihdu = fits.PrimaryHDU(header=prihdr)
-        thdulist = fits.HDUList([prihdu, t])
-        thdulist.writeto(name.replace('raw','molecfit_input/%i'%(ii)))
-    return
-
 #%%
+@progress_tracker
 def molecfit_output(main_directory: str,
                     spectrum_type: str = 'S1D',
                     mask_threshold: float = 0,
                     ) -> [sp.SpectrumList, sp.SpectrumList, sp.SpectrumList]:
+    """
+    Loads output of molecfit correction, as run by "run_molecfit_all" module.
+
+    Parameters
+    ----------
+    main_directory : str
+        Main directory of the project.
+    spectrum_type : str, optional
+        Type of spectrum, by default 'S1D'. Currently, no other modes are usable, but expansion to S2D format is planned.
+    mask_threshold : float, optional
+        Masking threshold, by default 0. Telluric profile is value between 0 and 1, with 0 being full absorption and 1 being no telluric absorption. As such, higher value masks more data. This is useful to avoid regions with strong contamination where the model is too unprecise and the uncertainty is not truthful to the data. 
+
+    Returns
+    -------
+    corrected_spectra : sp.SpectrumList
+        Molecfit corrected spectra.
+    telluric_profiles : sp.SpectrumList
+        Telluric profiles used for correction. Used for masking with threshold.
+    uncorrected_spectra : sp.SpectrumList
+        Original uncorrected spectra.
+    """
     
     spectrum_directory = main_directory + '/spectroscopy_data/'
     
@@ -85,12 +75,41 @@ def molecfit_output(main_directory: str,
     
     eso._numbering_nights(corrected_spectra)
     eso._numbering_nights(uncorrected_spectra)
+    eso._numbering_nights(telluric_profiles)
     
     return corrected_spectra, telluric_profiles, uncorrected_spectra
 
 def _load_molecfit_output_single_spectrum(filename: str,
                                           spectrum_type: str = 'S1D',
-                                          mask_threshold: float = 0):
+                                          mask_threshold: float = 0) -> [sp.Spectrum1D | sp.SpectrumCollection, sp.Spectrum1D | sp.SpectrumCollection, sp.Spectrum1D | sp.SpectrumCollection]:
+    """
+    Load a single molecfit corrected spectrum.
+
+    Parameters
+    ----------
+    filename : str
+        Filename to the fits file to open.
+    spectrum_type : str, optional
+        Type of spectrum, by default 'S1D'. Currently, no other modes are usable, but expansion to S2D format is planned.
+    mask_threshold : float, optional
+        Masking threshold, by default 0. Telluric profile is value between 0 and 1, with 0 being full absorption and 1 being no telluric absorption. As such, higher value masks more data. This is useful to avoid regions with strong contamination where the model is too unprecise and the uncertainty is not truthful to the data. 
+
+
+    Returns
+    -------
+    corrected_spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Corrected spectrum by molecfit
+    telluric_profile : sp.Spectrum1D | sp.SpectrumCollection
+        Telluric profile used by molecfit
+    uncorrected_spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Uncorrected spectrum before molecfit correction
+
+    Raises
+    ------
+    NotImplementedError
+        For non S1D data, no implementation is done yet.
+    """
+    
     
     if spectrum_type != 'S1D':
         raise NotImplementedError('It is not possible to load S2D files yet.')
@@ -108,7 +127,21 @@ def _load_molecfit_output_single_spectrum(filename: str,
         })
     meta.update(eso._load_meta_from_header(f[0].header))
     
-    mask_ind = np.where(f[2].data < mask_threshold)
+    telluric_profile = sp.Spectrum1D( # Define the spectrum
+        spectral_axis = f[1].data['wavelength_air']*u.AA,
+        flux = f[2].data*u.dimensionless_unscaled,
+        uncertainty = astropy.nddata.StdDevUncertainty(np.zeros_like(f[2].data)),
+        meta= meta,
+        mask= np.isnan(f[2].data)
+        )
+    
+    # from rats.spectra_manipulation import _shift_spectrum
+    
+    # telluric_profile = _shift_spectrum(telluric_profile,
+    #                                    velocities= [telluric_profile.meta['velocity_BERV']])
+    
+    mask_ind = np.where(telluric_profile.flux.value < mask_threshold)
+    
     flux = f[1].data['flux']
     error = f[1].data['error']
     flux[mask_ind] = np.nan
@@ -123,11 +156,6 @@ def _load_molecfit_output_single_spectrum(filename: str,
         mask = np.isnan(flux),
         )
     
-    telluric_profile = sp.Spectrum1D( # Define the spectrum
-        spectral_axis = f[1].data['wavelength_air']*u.AA,
-        flux = f[2].data*u.ct,
-        )
-    
     uncorrected_spectrum = sp.Spectrum1D( # Define the spectrum
         spectral_axis = f[3].data['wavelength_air']*u.AA,
         flux = f[3].data['flux']*u.ct,
@@ -138,13 +166,17 @@ def _load_molecfit_output_single_spectrum(filename: str,
     
     return corrected_spectrum, telluric_profile, uncorrected_spectrum
 
+# def _masking_flux_based_on_threshold(tellr,
+#                                      uncertainty,
+#                                      profile
+#                                      mask_threshold):
+#     return
 
 
 #%% molecfit_new_output
 # =============================================================================
 # Likely bugged with telluric profiles being in different rest frame
 # =============================================================================
-@todo_function
 @progress_tracker
 def molecfit_new_output(main_directory: str,
                         spec_type: str = 'S1D',

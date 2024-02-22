@@ -264,7 +264,57 @@ def _print_NDDataArray(Array: NDDataArray):
 #%% Magnitudes class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _Magnitudes():
+    B: NDDataArray | None = None
+    V: NDDataArray | None = None
+    J: NDDataArray | None = None
+    H: NDDataArray | None = None
+    K: NDDataArray | None = None
+    u: NDDataArray | None = None
+    g: NDDataArray | None = None
+    r: NDDataArray | None = None
+    i: NDDataArray | None = None
+    z: NDDataArray | None = None
+    
+    w1: NDDataArray | None = None
+    w2: NDDataArray | None = None
+    w3: NDDataArray | None = None
+    w4: NDDataArray | None = None
+    gaia: NDDataArray | None = None
+    ic: NDDataArray | None = None
+    TESS: NDDataArray | None = None
+    Kepler: NDDataArray | None = None
     #TODO
+    def _load_values_from_composite_table(self,
+                                          CompositeTableRow: pd.DataFrame):
+        """
+        Load values from NASA Exoplanet Composite Table into class attributes.
+
+        Parameters
+        ----------
+        CompositeTable : pd.DataFrame
+            NASA Exoplanet Composite Table as loaded through the TAP service.
+        """
+        self.name = CompositeTableRow['hostname']
+        self.B = _load_array_from_CompositeTable(CompositeTableRow, 'sy_bmag', 'B (Johnson) Magnitude')
+        self.V = _load_array_from_CompositeTable(CompositeTableRow, 'sy_vmag', 'V (Johnson) Magnitude')
+        self.J = _load_array_from_CompositeTable(CompositeTableRow, 'sy_jmag', 'J (2MASS) Magnitude')
+        self.H = _load_array_from_CompositeTable(CompositeTableRow, 'sy_hmag', 'H (2MASS) Magnitude')
+        self.K = _load_array_from_CompositeTable(CompositeTableRow, 'sy_kmag', 'Ks (2MASS) Magnitude')
+        self.u = _load_array_from_CompositeTable(CompositeTableRow, 'sy_umag', 'u (Sloan) Magnitude')
+        self.g = _load_array_from_CompositeTable(CompositeTableRow, 'sy_gmag', 'g (Sloan) Magnitude')
+        self.r = _load_array_from_CompositeTable(CompositeTableRow, 'sy_rmag', 'r (Sloan) Magnitude')
+        self.i = _load_array_from_CompositeTable(CompositeTableRow, 'sy_imag', 'i (Sloan) Magnitude')
+        self.z = _load_array_from_CompositeTable(CompositeTableRow, 'sy_zmag', 'z (Sloan) Magnitude')
+
+        self.w1 = _load_array_from_CompositeTable(CompositeTableRow, 'sy_w1mag', 'W1 (WISE) Magnitude')
+        self.w2 = _load_array_from_CompositeTable(CompositeTableRow, 'sy_w2mag', 'W2 (WISE) Magnitude')
+        self.w3 = _load_array_from_CompositeTable(CompositeTableRow, 'sy_w3mag', 'W3 (WISE) Magnitude')
+        self.w4 = _load_array_from_CompositeTable(CompositeTableRow, 'sy_w4mag', 'W4 (WISE) Magnitude')
+        self.gaia = _load_array_from_CompositeTable(CompositeTableRow, 'sy_gaiamag', 'Gaia Magnitude')
+        self.ic = _load_array_from_CompositeTable(CompositeTableRow, 'sy_icmag', 'I (Cousins) Magnitude')
+        self.TESS = _load_array_from_CompositeTable(CompositeTableRow, 'sy_tmag', 'TESS Magnitude')
+        self.Kepler = _load_array_from_CompositeTable(CompositeTableRow, 'sy_kepmag', 'Kepler Magnitude')
+
     pass
 #%% Catalogues class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
@@ -345,7 +395,7 @@ class _StellarParameters(parautils.StellarModel):
     density: NDDataArray | None = None
     vsini: NDDataArray | None = None
     rotation_period: NDDataArray | None = None
-    magnitudes: _Magnitudes | None = None
+    magnitudes: _Magnitudes | None = _Magnitudes()
     catalogues: _Catalogues | None = None
     
     def _load_values_from_composite_table(self,
@@ -375,7 +425,8 @@ class _StellarParameters(parautils.StellarModel):
         self.density = _load_array_from_CompositeTable(CompositeTableRow, 'st_dens', 'Stellar density')
         self.vsini = _load_array_from_CompositeTable(CompositeTableRow, 'st_vsin', 'Stellar vsini')
         self.rotation_period = _load_array_from_CompositeTable(CompositeTableRow, 'st_rotp', 'Stellar rotation period')
-    
+        self.magnitudes._load_values_from_composite_table(CompositeTableRow)
+        
     def print_values(self):
         """
         Print a default set of parameters using the logging PRINT level (custom defined by rats.utilities)
@@ -527,6 +578,7 @@ class _PlanetParameters(parautils.CalculationPlanet):
         self.true_obliquity.unit = u.deg
         self.rs_a_ratio = NDDataArray(1, unit= u.dimensionless_unscaled).divide(self.a_rs_ratio, handle_meta = 'first_found')
         self.rs_a_ratio.meta['parameter'] = 'Ratio of stellar radius to planet semimajor axis'
+
 
         self._calculate_gravity_acceleration()
     

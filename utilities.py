@@ -86,6 +86,10 @@ def default_logger_format(logger_update):
     logger_update.setLevel(LOG_LEVEL)
     logger_update.addHandler(stream)
     return logger_update
+
+
+logger = default_logger_format(logger)
+
 #%% List of decorators
 # Basic set to time a function, try loading and saving and to track progress
 # from chaos.utilities import time_function, save_and_load, progress_tracker, disable_func, skip_function,save_figure, todo_function
@@ -144,6 +148,7 @@ def time_function(func):
         logger.info(f'{func.__name__} ran in {t2} seconds')
         return output
     return wrapper
+
 
 #%% save_and_load
 def save_and_load(func):
@@ -321,112 +326,6 @@ def skip_function(func):
             output = func(*args,**kwargs)
             return output
     return wrapper
-
-#%% todo_function
-def todo_function(func):
-    '''
-    This decorator warns the use to TODO in function.
-
-    Parameters
-    ----------
-    func : function
-        Function to decorate.
-
-    Returns
-    -------
-    wrapper : function
-        Decorated function.
-
-    '''
-    @wraps(func)
-    def wrapper(*args,**kwargs):
-        logger.warning('Function: '+f'{func.__name__}'+ ' requires attention. Check the documentation for more information (above the def command)')
-        output = func(*args,**kwargs)
-        return output
-    return wrapper
-
-#%% save_figure
-def save_figure(func):
-    '''
-    Decorator function to save figure in file. Expect the decorated function to give output fig,axs -- fig being the fig.Figure class while axs being the artists that were drawn on figure.
-
-    Parameters
-    ----------
-    func : function
-        Function to decorate.
-
-    Returns
-    -------
-    wrapper : function
-        Decorated function.
-
-    '''
-    signature = inspect.signature(func)
-    default_kwargs = {
-        kw: value.default for kw, value in signature.parameters.items() if value.default != inspect.Signature.empty
-    }
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        '''
-        Wrapper function. 
-
-        Parameters
-        ----------
-        *args : tuple
-            Arguments.
-        **kwargs : tuple
-            Key arguments.
-
-        Returns
-        -------
-        figure_list : list
-            List containing the figures and respective artists together
-
-        '''
-        if not(os.path.exists(os.getcwd() + '/figures/')):
-            os.mkdir(os.getcwd() + '/figures/')
-        
-        figure_list = func(*args,**kwargs)
-        
-        if kwargs['fig_name'] != '':
-            for nf, (fig, axs) in enumerate(figure_list):
-                file =  os.getcwd() + '/figures/spectra/' + kwargs['fig_name'].replace('.','%i.'%(nf))
-                logger.info('Saved figure in: '+file)
-                fig.savefig(file)
-
-        return figure_list
-    return wrapper
-
-#%% save_progress
-@disable_func
-def save_progress(func,*args,file=None,force_calculate=False,no_save = False):
-    '''
-    Function to save progress of other functions
-    
-    Input:
-        func ; function - function for which we want to save progress
-        file ; string - pickle file (*.pkl) where to save/load result
-        force_calculate = False ; True/False - Force to recalculate function 
-        no_save = False ; True/False - Force not to save data (in case of big files
-    Output:
-        result ; *results - resulting arguments that we would normally receive from func(*args)
-    '''
-    
-    if not(force_calculate): # Recalculate data?
-        try:
-            with open(file, 'rb') as input_file:
-                print('Result loaded in: %s'%(file))
-                result =  pickle.load(input_file)
-        except: # Need to recalculate as it wasn't found
-            print('Recalculating data as saved pickle was not found in: %s'%file)
-            force_calculate=True
-    if force_calculate: # Recalculate
-        result = func(*args)
-        if not(no_save): # Save result?
-            with open(file, 'wb') as output_file:
-                print('Saved progress in %s'%file)
-                pickle.dump(result, output_file)
-    return result
 
 #%%
 def rename_aliens_mac(path:str):

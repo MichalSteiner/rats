@@ -25,7 +25,7 @@ import logging
 import rats.parameters as para
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from rats.utilities import time_function, save_and_load, progress_tracker, skip_function, disable_func, default_logger_format, todo_function
+from rats.utilities import time_function, save_and_load, progress_tracker, skip_function, disable_func, default_logger_format
 
 #%% Setting up logging
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ for item in os.listdir(OPACITY_LIST_LOCATION + '/line_by_line/'):
 # Remove invalid species from list
 # TODO Check why they don't work.
 SPECIES_LIST.remove('H2_main_iso')
-SPECIES_LIST.remove('Na_allard_new')
+# SPECIES_LIST.remove('Na_allard_new')
 SPECIES_LIST.remove('VO_ExoMol_Specific_Transitions')
 SPECIES_LIST.remove('VO_ExoMol_McKemmish')
 SPECIES_LIST.remove('K_allard_cold')
@@ -220,6 +220,11 @@ def _get_mass_fraction_value_for_key(key: str,
     """
     # FIXME Separate each species manually, especially for molecules. 
     # FIXME Distinguish isotopes from main_iso species.
+    for species, value in mass_fraction.items():
+        if key.startswith(species + '_'):
+            return value
+        if key == species:
+            return value
     
     if key in mass_fraction.keys():
         value = mass_fraction[key]
@@ -403,7 +408,7 @@ def _subtract_continuum(model: sp.Spectrum1D):
 #%% Create a single template with petitRADtrans
 def _create_single_template(SystemParameters: para.SystemParametersComposite,
                             spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
-                            species: str,
+                            species: str | list,
                             MMW_value : float = 2.33,
                             P0: float = 1,
                             ):
@@ -414,10 +419,11 @@ def _create_single_template(SystemParameters: para.SystemParametersComposite,
     spectral_axis_old = spectral_axis
     spectral_axis = airtovac(spectral_axis.value) * spectral_axis.unit
     
-    atmosphere = Radtrans(line_species = [species],
+    atmosphere = Radtrans(line_species = list(species),
         wlen_bords_micron = [spectral_axis[0].to(u.um).value, # Spectrum wavelength-range
                              spectral_axis[-1].to(u.um).value], # Spectrum wavelength-range
-        mode = 'lbl'
+        mode = 'lbl',
+        lbl_opacity_sampling = 7, # Downsample to roughly ESPRESSO resolution
         )
     
     # System parameters

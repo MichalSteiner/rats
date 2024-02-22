@@ -12,7 +12,7 @@ import rats.spectra_manipulation as sm
 import rats.spectra_manipulation_subroutines.calculation as smcalc
 import logging
 import astropy.nddata as nd
-from rats.utilities import default_logger_format
+from rats.utilities import default_logger_format, time_function
 from pathos.multiprocessing import Pool
 from itertools import repeat
 
@@ -20,11 +20,13 @@ from itertools import repeat
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
+@time_function
 def cross_correlate_list(
     spectrum_list: sp.SpectrumList,
     model: sp.Spectrum1D,
-    velocities: u.Quantity = np.arange(-200, 200, 0.5) * u.km/u.s,
-    sn_type: str | None = None) -> sp.SpectrumList:
+    velocities: u.Quantity = np.arange(-200, 200.5, 0.5) * u.km/u.s,
+    sn_type: str | None = None,
+    force_multiprocessing: bool = False) -> sp.SpectrumList:
     """
     Cross-correlate branch for sp.Spectrum1D objects. 
 
@@ -50,18 +52,30 @@ def cross_correlate_list(
     
     CCF_flux = np.zeros_like([velocities.value]*len(spectrum_list))
     
-    for ind, velocity in enumerate(velocities):
-        logger.info(f'Calculation of velocity {velocity} | progress: {(ind/len(velocities)*100):.2f}%')
-        
-        # We are shifting model, not the spectrum list, hence the reverse sign
-        shifted_model = sm._shift_spectrum(
-            spectrum= model,
-            velocities= [-velocity]
-            )
-        
-        CCF_flux[:, ind] = _calculate_CCF_single_velocity(spectrum_list= spectrum_list,
-                                                         shifted_model= shifted_model,
-                                                         sn_type= sn_type)
+    if force_multiprocessing:
+        logger.warning('Starting multiprocessing - CCF calculation')
+        with Pool(processes=16, maxtasksperchild=10) as p:
+            CCF_flux = p.starmap(_CCF_multiprocessing_wrapper,
+                                 zip(
+                                     repeat(spectrum_list),
+                                     repeat(model),
+                                     velocities,
+                                     repeat(sn_type),
+                                     )
+                                 )
+        CCF_flux = np.asarray(CCF_flux).transpose()
+        logger.warning('Finished multiprocessing - CCF calculation')
+    else:
+        for ind, velocity in enumerate(velocities):
+            logger.info(f'Calculation of velocity {velocity} | progress: {(ind/len(velocities)*100):.2f}%')
+            # We are shifting model, not the spectrum list, hence the reverse sign
+            shifted_model = sm._shift_spectrum(
+                spectrum= model,
+                velocities= [-velocity]
+                )
+            CCF_flux[:, ind] = _calculate_CCF_single_velocity(spectrum_list= spectrum_list,
+                                                            shifted_model= shifted_model,
+                                                            sn_type= sn_type)
         
     CCF_list = sp.SpectrumList()
     
@@ -74,6 +88,39 @@ def cross_correlate_list(
                 )
             )
     return CCF_list
+
+def _CCF_multiprocessing_wrapper(spectrum_list: sp.SpectrumList,
+                                 model: sp.Spectrum1D | sp.SpectrumCollection,
+                                 velocity: u.Quantity,
+                                 sn_type: str | None) -> astropy.nddata.NDDataArray:
+    """
+    CCF calculation wrapper for multiprocessing function. It is a 2-step function of first shifting the template model and then calculation of the CCF array.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list which to cross-correlate with the template
+    model : sp.Spectrum1D | sp.SpectrumCollection
+        Template model which is being cross-correlated with the spectrum_list.
+    velocity : u.Quantity
+        Velocity by which to shift the template.
+    sn_type : str | None
+        Type of weighting used. For options, check smcalc._gain_weights_list() function.
+
+    Returns
+    -------
+    CCF_flux : astropy.nddata.NDDataArray
+        The CCF values for all spectra in spectrum list.
+    """
+    
+    shifted_model = sm._shift_spectrum(
+        spectrum= model,
+        velocities= [-velocity]
+        )
+    CCF_flux = _calculate_CCF_single_velocity(spectrum_list= spectrum_list,
+                                              shifted_model= shifted_model,
+                                              sn_type= sn_type)
+    return CCF_flux
 
 #%%
 def _calculate_CCF_single_velocity(spectrum_list: sp.SpectrumList,

@@ -14,7 +14,7 @@ Template for transmission spectroscopy pipeline using the RATS (Rapid Analysis o
 #%% Importing libraries
 # Rats library - custom TS pipeline
 import rats
-import rats.eso as eso # Loading ESO instruments
+import load.eso as eso # Loading ESO instruments
 import rats.parameters as para # System parameters
 import rats.single_use as su # Single use functions
 import rats.plot_spectra as ps # Spectra plotting
