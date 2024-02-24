@@ -195,7 +195,7 @@ class PlotSingleSpectrum(PlotsUtils):
                     spectrum.flux.value,
                     spectrum.uncertainty.array,
                     color= color_spectrum,
-                    alpha= 0.4,
+                    alpha= 0.3,
                     fmt= '.'
                     )
         
