@@ -19,6 +19,7 @@ from itertools import repeat
 from copy import deepcopy
 import astropy.constants as con
 import pickle
+import polars as pl
 import warnings
 import math
 import specutils.fitting as fitting
@@ -40,18 +41,93 @@ import logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
-def _sigma_clipping_spectrum(spectrum_list: sp.SpectrumList,
-                             num_of_sigma: float = 5,
-                             ) -> sp.SpectrumList:
-    
-    flux_array = astropy.nddata.NDDataArray([spectrum.flux for spectrum in spectrum_list])
-    new_flux = astropy.stats.sigma_clip(flux_array,
-                                        sigma= num_of_sigma,
-                                        axis=1)
-    
-    
-    return
+@progress_tracker
+@time_function
+def sigma_clipping_list(spectrum_list: sp.SpectrumList,
+                        num_of_sigma: float = 5,
+                        window_size: int = 1000
+                        ) -> sp.SpectrumList:
+    """
+    Clips the spectrum list by number of sigma.
 
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to sigma-clip.
+    num_of_sigma : float, optional
+        Number of sigma to clip by, by default 5
+    window_size : int, optional
+        Size of the rolling window, by default 1000.
+
+    Returns
+    -------
+    new_spectrum_list : sp.SpectrumList
+        Sigma-clipped spectrum list.
+    """
+    new_spectrum_list = sp.SpectrumList()
+    
+    for item in spectrum_list:
+        new_spectrum = _sigma_clipping_spectrum(item,
+                                            num_of_sigma=num_of_sigma)
+        new_spectrum_list.append(new_spectrum)
+
+    return new_spectrum_list
+
+def _sigma_clipping_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                             num_of_sigma:float,
+                             window_size: int = 500,
+                             ) -> sp.Spectrum1D | sp.SpectrumCollection:
+    """
+    Sigma clipping of single spectrum. The rolling window is of size 1000 by default.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to sigma-clip.
+    num_of_sigma : float
+        Number of sigma to sigma clip by.
+    window_size : int, optional
+        Size of the rolling window, by default 1000.
+
+    Returns
+    -------
+    new_spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        New spectrum which has been sigma clipped by.
+    """
+    flux = pl.Series('flux', spectrum.flux.value).fill_nan(None)
+    while True:
+        rolling_std = flux.rolling_std(window_size= window_size, center= True , min_periods= 1
+                                   ) * num_of_sigma
+        rolling_median = flux.rolling_median(window_size= window_size, center= True , min_periods= 1
+                                      )
+        new_flux = np.where(abs(flux - rolling_median) < rolling_std,
+                            flux,
+                            np.nan
+                            )
+        
+        if sum(np.isnan(flux.to_numpy())) == sum(np.isnan(new_flux)):
+            break
+        else:
+            flux = pl.Series('flux', new_flux).fill_nan(None)
+    
+    if type(spectrum) == sp.Spectrum1D:
+        new_spectrum = sp.Spectrum1D(
+                spectral_axis= spectrum.spectral_axis,
+                flux= new_flux * spectrum.flux.unit,
+                uncertainty= spectrum.uncertainty,
+                mask = np.isnan(new_flux),
+                meta= spectrum.meta,
+            )
+    if type(spectrum) == sp.SpectrumCollection:
+        raise NotImplementedError('Please test whether this implementation work.')
+        new_spectrum = sp.SpectrumCollection(
+                spectral_axis= spectrum.spectral_axis,
+                flux= new_flux,
+                uncertainty= spectrum.uncertainty,
+                mask = np.isnan(new_flux),
+                meta= spectrum.meta,
+            )
+    return new_spectrum
 
 
 #%% Masking values below a flux threshold
@@ -512,11 +588,17 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
     new_spectrum : sp.Spectrum1D | sp.SpectrumCollection
         Shifted spectrum, interpolated to the old wavelength grid.
     """
-    term = 1 # Initiation of the term (1 since we are dividing/multiplying the term)
-    for velocity in velocities: # To factor all velocities (replace with relativistic one?)
-        term = term / (1+velocity.to(u.m/u.s)/con.c) # Divide as the velocities are in opposite sign
-    new_x_axis = spectrum.spectral_axis * term # Apply Doppler shift
-    
+    if spectrum.spectral_axis.unit.is_equivalent(u.km/u.s): # If spectral axis is in velocity space
+        new_x_axis = spectrum.spectral_axis.to_value(u.km/u.s) *u.km/u.s # This seems weird
+        for velocity in velocities:
+            new_x_axis = new_x_axis + velocity
+    elif spectrum.spectral_axis.unit.is_equivalent(u.AA): # If spectral axis is in wavelength space
+        term = 1 # Initiation of the term (1 since we are dividing/multiplying the term)
+        for velocity in velocities: # To factor all velocities (replace with relativistic one?)
+            term = term / (1+velocity.to(u.m/u.s)/con.c) # Divide as the velocities are in opposite sign
+        new_x_axis = spectrum.spectral_axis * term # Apply Doppler shift
+    else: 
+        raise ValueError(f'The unit of velocities is wrong. The units of velocities is {[velocity.unit.is_equivalent(u.AA) for velocity in velocities]}')
     # Mask handling
     # Combine the mask arrays of flux and errors
     mask_flux = ~np.isfinite(spectrum.flux)
@@ -817,6 +899,66 @@ def binning_list(spectrum_list: sp.SpectrumList,
             
     return new_spectrum_list
 
+def median_subtract(spectrum_list: sp.SpectrumList):
+    
+    if type(spectrum_list[0]) == sp.Spectrum1D:
+        median_spectrum = sp.Spectrum1D(
+            spectral_axis= spectrum_list[0].spectral_axis,
+            flux = np.nanmedian(np.asarray([spectrum.flux for spectrum in spectrum_list]), axis=0) *u.dimensionless_unscaled
+        )
+        
+    elif type(spectrum_list[0]) == sp.SpectrumCollection:
+        raise NotImplementedError('To be added')
+    
+    new_spectrum_list = sp.SpectrumList()
+    for spectrum in spectrum_list:
+        new_spectrum_list.append(
+            spectrum.subtract(median_spectrum, handle_meta='first_found').add(1*u.dimensionless_unscaled, handle_meta='first_found')
+        )
+    return new_spectrum_list
+
+@time_function
+def filter_median_absolute_deviation(spectrum_list: sp.SpectrumList,
+                                     number_of_sigma: float = 5,
+                                     window_size: int = 40,
+                   ): 
+    import polars as pl
+    from copy import deepcopy
+    
+    flux = np.asarray([spectrum.flux.value for spectrum in spectrum_list])
+    median_flux = np.nanmedian(flux, axis = 0)
+    absolute_deviations = abs(flux - median_flux)
+    flattened = pl.Series(absolute_deviations.T.flatten()).fill_nan(None)
+    
+    # As Series objects are only 1D objects, the flux has been reshaped properly
+    output = flattened.rolling_median(window_size= window_size * len(spectrum_list),
+                                      center=True,
+                                      min_periods=1
+                                      ).gather_every(
+                                          len(spectrum_list)
+                                          ) * number_of_sigma
+    
+    new_spectrum_list = sp.SpectrumList()
+    spectrum_list = deepcopy(spectrum_list)
+    for spectrum in spectrum_list:
+        if type(spectrum) == sp.Spectrum1D:
+            indices = spectrum.uncertainty.array > output.to_numpy()
+            new_flux = spectrum.flux
+            new_flux[indices] = np.nan
+            new_uncertainty = spectrum.uncertainty.array
+            new_uncertainty[indices] = np.nan
+            
+            new_spectrum_list.append(
+                sp.Spectrum1D(
+                    spectral_axis= spectrum.spectral_axis,
+                    flux = new_flux,
+                    uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty),
+                    meta = spectrum.meta,
+                    mask = np.isnan(new_flux)
+                )
+            )
+    return new_spectrum_list
+
 #%%
 def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                             quantile: float = .85,
@@ -858,13 +1000,15 @@ def _normalize_spectrum_quantile(spectrum: sp.Spectrum1D | sp.SpectrumCollection
                              center=True).quantile(
                                  quantile
                                  )
+                             
+    normalization_function = astropy.nddata.NDDataArray(data= normalization_function)
     
     match type(spectrum):
         case sp.Spectrum1D:
             new_spectrum = sp.Spectrum1D(
                 spectral_axis= spectrum.spectral_axis, 
                 flux = old_flux.divide(normalization_function).data * u.dimensionless_unscaled,
-                uncertainty= astropy.nddata.StdDevUncertainty(old_flux.divide(normalization_function).uncertainty.array),
+                uncertainty= astropy.nddata.StdDevUncertainty(old_flux.divide(normalization_function).uncertainty.array.to_numpy()), # The numpy thing is weird, why does this work like this?
                 mask= spectrum.mask.copy(),
                 meta= spectrum.meta.copy(),
             )
@@ -874,87 +1018,7 @@ def _normalize_spectrum_quantile(spectrum: sp.Spectrum1D | sp.SpectrumCollection
     new_spectrum.meta['normalization'] = True
     return new_spectrum
 
-#%% normalize_spectrum
-@disable_func
-def normalize_spectrum_old(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
-                       quantile: float=.85,
-                       polyfit: None | int = None) -> sp.Spectrum1D | sp.SpectrumCollection:
-    # CLEANME
-    # TESTME
-    # DOCUMENTME
-    
-    
-    if (polyfit is None and # Polynomial fit not requested
-        type(spectrum) == sp.Spectrum1D and # Is a 1D spectrum
-        len(spectrum.spectral_axis) > 10000): # Is longer than 10000 pixels
-        tmp_spec = sp.Spectrum1D(
-            spectral_axis = spectrum.spectral_axis,
-            flux = np.array(
-                pd.Series(spectrum.flux.value).rolling(7500,
-                                                       min_periods=1,
-                                                       center=True
-                                                       ).quantile(quantile))*spectrum.flux.unit,
-                            )
-    else:
-        if polyfit is None:
-            polyfit = 1
-        p = np.polyfit(spectrum.spectral_axis.value[~np.isnan(spectrum.flux)],
-                    spectrum.flux.value[~np.isnan(spectrum.flux)],
-                    1,
-                    rcond=None,
-                    full=False,
-                    w=None,
-                    cov=False
-                    )
-        tmp_spec = sp.Spectrum1D(
-            spectral_axis = spectrum.spectral_axis,
-            flux = (np.polyval(p,spectrum.spectral_axis.value))*pd.Series(spectrum.flux.value / np.polyval(p,spectrum.spectral_axis.value)).quantile(quantile)*spectrum.flux.unit,
-            )
-        
-        pass
-    
-    if (len(spectrum.flux) <10000) and linfit==True: 
-        p = np.polyfit(spectrum.spectral_axis.value[~np.isnan(spectrum.flux)],
-                         spectrum.flux.value[~np.isnan(spectrum.flux)],
-                         1,
-                         rcond=None,
-                         full=False,
-                         w=None,
-                         cov=False
-                         )
-        tmp_spec = sp.Spectrum1D(
-            spectral_axis = spectrum.spectral_axis,
-            flux = (np.polyval(p,spectrum.spectral_axis.value))*pd.Series(spectrum.flux.value / np.polyval(p,spectrum.spectral_axis.value)).quantile(quantile)*spectrum.flux.unit,
-            )
-    elif (len(spectrum.flux) <10000) and linfit==False:
-        tmp_spec = sp.Spectrum1D(
-            spectral_axis = spectrum.spectral_axis,
-            flux =np.full_like(spectrum.spectral_axis.value, pd.Series(spectrum.flux.value).fillna(999999).quantile(quantile))*spectrum.flux.unit,
-            )
-    else:
-        tmp_spec = sp.Spectrum1D(spectral_axis = spectrum.spectral_axis,
-                                 flux = np.array( pd.Series(spectrum.flux.value).rolling(7500
-                                   ,min_periods=1,center=True).quantile(quantile))*spectrum.flux.unit,
-                                  )
-    
-    normalization = spectrum.divide(tmp_spec,
-                                    handle_mask = 'first_found',
-                                    handle_meta = 'first_found',
-                                    )
-    normalization.spectral_axis.value.put(np.arange(len(spectrum.spectral_axis)),spectrum.spectral_axis)
-    
-    # Rewrite the spectral axis, as operations are done only on the flux array and WCS is dumb.
-    normalized_spectrum = sp.Spectrum1D(spectral_axis = spectrum.spectral_axis,
-                             flux = normalization.flux*u.dimensionless_unscaled,
-                             uncertainty = normalization.uncertainty,
-                             mask = spectrum.mask.copy(),
-                             meta = spectrum.meta.copy(),
-                              )
-    normalized_spectrum.meta['normalization'] = True
-    return normalized_spectrum
-
 #%% normalize_list
-@time_function
 @progress_tracker
 @save_and_load
 def normalize_list(spectrum_list: sp.SpectrumList,
@@ -994,7 +1058,7 @@ def normalize_list(spectrum_list: sp.SpectrumList,
         with Pool() as p:
             # Throws bunch of warning on weakref, but seems to work. WTF?
             new_spectrum_list = p.starmap(normalize_spectrum,
-                        zip(spectrum_list, repeat(quantile), repeat(linfit))
+                        zip(spectrum_list, repeat(quantile), repeat(polyfit_order))
                         )
         logger.warning('Finished multiprocessing')
         
@@ -1170,103 +1234,6 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
 
     return master_list
 
-#%% rm_correction
-def rm_correction(spec,master,star_para):
-    """
-    Corrects spectrum for RM_effect
-    Equation used (latex syntax):
-        F_{corr} = 1 + (\frac{R_p^2}{R_s^2}) (1 - \frac{M - F_i \delta_i}{M_{i,v_i}\Delta_i})
-    
-    Input:
-        spec ; sp.Spectrum1D , RF_star
-        master ; sp.Spectrum1D, out-of-transit spectrum
-        star_para ; Star_para class with parameters
-    Output:
-        corrected_spectrum ; sp.Spectrum1D, corrected spectrum for RM
-    """
-    # Defining all necessary variables
-    vel_RM = spec.meta['vel_stel_loc']
-    # vel_RM = -spec.meta['vel_stel_loc']
-    lc_flux = spec.meta['light_curve_flux']
-    delta = spec.meta['delta']
-    scaling_factor = (star_para.planet.radius **2 / star_para.star.radius**2).decompose()
-    meta_new = spec.meta.copy()
-    mask_new = spec.mask.copy()
-    spec_axis = spec.spectral_axis
-    # Creating both shifted and unshifted master
-    master_non_shifted = deepcopy(master)
-    master_shifted = _shift_spectrum(master, 
-                       velocities = [vel_RM]
-                       )
-    # Binning shifted spectrum to same wave_grid
-    spec_list = sp.SpectrumList([spec,master_non_shifted,master_shifted])
-    new_spec_list = binning_list(spec_list)
-    spec,master_non_shifted,master_shifted = new_spec_list[0],new_spec_list[1],new_spec_list[2]
-    """
-    Equation for RM_correction (works with latex)
-    
-    F_{corr} = 1 + (\frac{R_p^2}{R_s^2}) (1 - \frac{M - F_i \delta_i}{M_{i,v_i}\Delta_i})
-    
-    
-    """
-    tmp_spec = prepare_const_spec(spec,lc_flux)
-    numerator = master_non_shifted.subtract(spec*tmp_spec)
-    
-    # err_numerator = np.sqrt( master_non_shifted.uncertainty.array **2 + (spec.uncertainty.array*lc_flux)**2)
-    # print('Numerator:',np.nansum(numerator.uncertainty.array - err_numerator))
-    
-    tmp_spec = prepare_const_spec(master_shifted,delta)
-    denominator = master_shifted.multiply(tmp_spec)
-    # err_denominator = master_shifted.uncertainty.array * delta
-    # print('Denominator',np.nansum(denominator.uncertainty.array - err_denominator))
-    
-    
-    fraction = numerator.divide(denominator)
-    # err_fraction=  np.sqrt( (numerator.uncertainty.array / denominator.flux.value) **2 +\
-    #                         (numerator.flux.value / denominator.flux.value**2 *\
-    #                           denominator.uncertainty.array
-    #                           )**2)
-    # print('Fraction:',np.nansum(fraction.uncertainty.array - err_fraction))
-    
-    tmp_spec = prepare_const_spec(fraction,-1 * u.dimensionless_unscaled)
-    reverse = fraction.multiply(tmp_spec)
-    # err_reverse = fraction.uncertainty.array 
-    # print(np.nansum(reverse.uncertainty.array - err_reverse))
-    
-    tmp_spec = prepare_const_spec(reverse,1 * u.dimensionless_unscaled)
-    reverse_plus_1 = reverse.add(tmp_spec)
-    # err_reverse_plus_1 = reverse_plus_1.uncertainty.array 
-    # print(np.nansum(reverse_plus_1.uncertainty.array - err_reverse_plus_1))
-    
-    tmp_spec = prepare_const_spec(reverse,scaling_factor)
-    scaled = reverse_plus_1.multiply(tmp_spec)
-    # err_scaled = reverse_plus_1.uncertainty.array * scaling_factor
-    # print(np.nansum(scaled.uncertainty.array - err_scaled))
-    
-    
-    tmp_spec = prepare_const_spec(scaled,1 * u.dimensionless_unscaled)
-    corrected_spectrum = scaled.add(tmp_spec)
-    # err_corrected_spectrum = corrected_spectrum.uncertainty.array
-    # print(np.nansum(corrected_spectrum.uncertainty.array - err_corrected_spectrum))
-    
-    
-    # Assigning mask and meta values to spectrum
-    corrected_spectrum.mask = mask_new
-    corrected_spectrum.meta = meta_new
-    corrected_spectrum.meta['RM_corrected'] = True
-    
-    rm_corrected_spectrum = sp.Spectrum1D(
-        spectral_axis = spec_axis,
-        flux = corrected_spectrum.flux,
-        uncertainty = corrected_spectrum.uncertainty,
-        meta = corrected_spectrum.meta.copy(),
-        mask = mask_new,
-        wcs = add_spam_wcs(1)
-        
-        )
-    
-    return rm_corrected_spectrum
-
 #%% spec_list_master_correct
 @progress_tracker
 @save_and_load
@@ -1297,33 +1264,33 @@ def spec_list_master_correct(spec_list,master,force_load=False, force_skip=False
         corrected_list.append(corrected_spectrum)
     return corrected_list
 
-#%% rm_list_correct
-def rm_list_correct(spec_list,master,star_para):
-    """
-    Corrects spec_list for RM effect
-    Input:
-        spec_list ; sp.SpectrumList to correct for RM
-        master ; sp.SpectrumList containing master divided by night
-        star_para ; Star_para class containing stellar parameters (P_R,S_R necessary)
-    Output:
-        rm_list_corrected ; sp.SpectrumList corrected by RM
-    """
+# #%% rm_list_correct
+# def rm_list_correct(spec_list,master,star_para):
+#     """
+#     Corrects spec_list for RM effect
+#     Input:
+#         spec_list ; sp.SpectrumList to correct for RM
+#         master ; sp.SpectrumList containing master divided by night
+#         star_para ; Star_para class containing stellar parameters (P_R,S_R necessary)
+#     Output:
+#         rm_list_corrected ; sp.SpectrumList corrected by RM
+#     """
 
-    sublist = get_sublist(spec_list,'RM_velocity',True)
-    rm_list_corrected = sp.SpectrumList()
-    entire_list = spec_list.copy()
-    master_RF_star_oot = calculate_master_list(spec_list,key = 'Transit',value =False)
-    entire_list = spec_list_master_correct(spec_list,master_RF_star_oot)
-    for item in sublist:
-        num_night = item.meta['Night_num']
-        master_night = master[num_night]
-        corrected_spectrum = rm_correction(item,master_night,star_para)
-        rm_list_corrected.append(corrected_spectrum)
-        for ind,ent_item in enumerate(entire_list):
-            if ent_item.meta['spec_num'] == corrected_spectrum.meta['spec_num']:
-                entire_list[ind] = corrected_spectrum
+#     sublist = get_sublist(spec_list,'RM_velocity',True)
+#     rm_list_corrected = sp.SpectrumList()
+#     entire_list = spec_list.copy()
+#     master_RF_star_oot = calculate_master_list(spec_list,key = 'Transit',value =False)
+#     entire_list = spec_list_master_correct(spec_list,master_RF_star_oot)
+#     for item in sublist:
+#         num_night = item.meta['Night_num']
+#         master_night = master[num_night]
+#         corrected_spectrum = rm_correction(item,master_night,star_para)
+#         rm_list_corrected.append(corrected_spectrum)
+#         for ind,ent_item in enumerate(entire_list):
+#             if ent_item.meta['spec_num'] == corrected_spectrum.meta['spec_num']:
+#                 entire_list[ind] = corrected_spectrum
 
-    return rm_list_corrected,entire_list
+#     return rm_list_corrected,entire_list
 
 #%% exciser_fill_with_nan
 def exciser_fill_with_nan(spectrum,region):
@@ -1463,7 +1430,8 @@ def shift_spectrum_multiprocessing(spectrum,
                                )
     new_spectrum = _shift_spectrum(spectrum,velocity_field)
     return new_spectrum
-    
+
+
 
 #%% shift_list
 @progress_tracker
@@ -1475,7 +1443,7 @@ def shift_list(spectrum_list:sp.SpectrumList,
                shift_v_planet:float, 
                shift_constant:u.Quantity= 0, 
                shift_key: str | None = None,
-               force_multiprocessing:bool = True,
+               force_multiprocessing:bool = False,
                force_load = False,
                force_skip = False,
                pkl_name = '',
@@ -1611,7 +1579,6 @@ def velocity_domain_sgl(spectrum,line,constraint=[-100,100]*u.km/u.s):
         uncertainty = astropy.nddata.StdDevUncertainty(spectrum.uncertainty.array),
         meta = spectrum.meta.copy(),
         mask = spectrum.mask.copy(),
-        wcs = add_spam_wcs(1)
         )
     spec_region = sp.SpectralRegion(constraint[0].to(u.m/u.s),constraint[1].to(u.m/u.s)) # Create subregion for the spectrum
     velocity_spectrum = extract_region_in_spectrum(new_spectrum,spec_region)
@@ -1656,7 +1623,6 @@ def velocity_fold(spec_list,line_list,constraint=[-100,100]*u.km/u.s):
             uncertainty = astropy.nddata.StdDevUncertainty(np.sqrt(uncertainty)),
             meta = item.meta.copy(),
             mask = item.mask.copy(),
-            wcs = add_spam_wcs(1)
             )
     return spec_list_velocity, new_spectrum
 #%% RM_simulation

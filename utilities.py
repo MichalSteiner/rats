@@ -268,7 +268,7 @@ def progress_tracker(func):
 
         '''
         
-        logger.info('Currently working on: '+f'{func.__name__}')
+        logger.info('Currently working on: \n'+f'    {func.__name__}')
         output = func(*args,**kwargs)
         return output
     
@@ -320,7 +320,7 @@ def skip_function(func):
         kwargs = default_kwargs | kwargs
         
         if kwargs['force_skip']:
-            logger.info('Currently skipping working on: '+f'{func.__name__}')
+            logger.info('Currently skipping working on: \n'+f'    {func.__name__}')
             pass
         else:
             output = func(*args,**kwargs)
@@ -346,3 +346,59 @@ def rename_aliens_mac(path:str):
         os.rename(path + item,
                   path + item.replace('\uf022', '_'))
     return
+
+#%% skip_function
+def skip_function(func):
+    '''
+    This decorator disables a function based on a provided keyword. Use this to of code by disabling for time saving.
+
+    Parameters
+    ----------
+    func : function
+        Function to decorate.
+
+    Returns
+    -------
+    wrapper : function
+        Decorated function.
+
+    '''
+    signature = inspect.signature(func)
+    default_kwargs = {
+        kw: value.default for kw, value in signature.parameters.items() if value.default != inspect.Signature.empty
+    }
+    @wraps(func)
+    def wrapper(*args,**kwargs):
+        kwargs = default_kwargs | kwargs
+        
+        if kwargs['force_skip']:
+            logger.info('Currently skipping working on: '+f'{func.__name__}')
+            pass
+        else:
+            output = func(*args,**kwargs)
+            return output
+    return wrapper
+
+
+def print_acknowledgements():
+    logger.print('Please acknowledge following codes, if used in analysis:')
+    logger.print('    RATS: (this pipeline)')
+    logger.print('        Steiner et al. 2023')
+    logger.print('        Steiner et al. 2024')
+    
+    logger.print('    petitRADTRANS: (CCF templates)')
+    logger.print('        Molliere et al. 2019')
+    
+    logger.print('    LDCU: (Limb darkening coefficients for batman light-curves)')
+    # TODO
+    logger.print('        TODO:')
+    
+    logger.print('    batman: (Modeling of light curves, also used in some weightings)')
+    logger.print('        TODO:')
+    
+    
+    logger.print('    StarRotator: (Modeling of RM + CLV effects)')
+    logger.print('        TODO:')
+    
+    
+    raise NotImplementedError

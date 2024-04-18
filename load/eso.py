@@ -53,7 +53,7 @@ def _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollectio
     """
     
     
-    new_flux = np.where(spectrum.flux > 0, spectrum.flux, np.nan)
+    new_flux = np.where(spectrum.flux > 0, spectrum.flux.value, np.nan)
     new_uncertainty = np.where(spectrum.flux > 0, spectrum.uncertainty.array, np.nan)
     new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty)
     
@@ -221,30 +221,54 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     return spectrum
 
 #%% Load CCF spectrum
-def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList):
-    #TODO Implement CCF
-    raise NotImplementedError("Not implemented yet")
+def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
+    """
+    Load CCF of a single spectrum with template mask. 
+
+    Parameters
+    ----------
+    fits_hdulist : fits.hdu.hdulist.HDUList
+        Opened fits file.
+
+    Returns
+    -------
+    spectrum : sp.Spectrum1D
+        CCF result of single spectrum with template mask
+    """
+    main_header = fits_hdulist[0].header # Preparing header of spectra
     
-    # for key in fits_hdulist[0].header.keys():
-    #     if key.startswith('ESO PRO REC1 PARAM') and key.endswith('NAME'):
-    #         if fits_hdulist[0].header[key] == 'rv_center'
-    #         if fits_hdulist[0].header[key] == 'rv_range'
-    #         if fits_hdulist[0].header[key] == 'rv_step'
-            
-            
+    for key in fits_hdulist[0].header.keys():
+        if key.startswith('ESO PRO REC1 PARAM') and key.endswith('NAME'):
+            if fits_hdulist[0].header[key] == 'rv_center':
+                rv_center = float(fits_hdulist[0].header[key.replace('NAME', 'VALUE')])
+            if fits_hdulist[0].header[key] == 'rv_range':
+                rv_range = float(fits_hdulist[0].header[key.replace('NAME', 'VALUE')])
+            if fits_hdulist[0].header[key] == 'rv_step':
+                rv_step = float(fits_hdulist[0].header[key.replace('NAME', 'VALUE')])
+    rv_range = np.arange(rv_center - rv_range, rv_center + rv_range + rv_step, rv_step)
+    flux_total = fits_hdulist['SCIDATA'].data[-1] * u.ct
+    error_total = astropy.nddata.StdDevUncertainty(fits_hdulist['ERRDATA'].data[-1])
     
-    # spectrum = sp.Spectrum1D(
-    #     spectral_axis = ,
-    #     flux = ,
-    #     uncertainty = ,
-    #     meta= ,
-    #     mask = ,
-    # )
+    meta = _basic_meta_parameters()
+    meta.update({
+        'header': main_header,
+        'BERV_corrected': True,
+        'RF_Barycenter': True,
+        'RF': 'Barycenter_Sol',
+        })
+    
+    meta.update(_load_meta_from_header(main_header))
+    # TODO: update meta parameters for CCF
     
     
-    
-    
-    return
+    spectrum = sp.Spectrum1D(
+        spectral_axis = rv_range * u.km/u.s,
+        flux = flux_total,
+        uncertainty = error_total,
+        meta= meta,
+        mask = np.isnan(flux_total) | np.isnan(error_total.array),
+        )
+    return spectrum
   
 #%% Load all spectra from project
 @save_and_load

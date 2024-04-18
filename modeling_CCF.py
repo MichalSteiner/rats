@@ -311,6 +311,7 @@ def _T_P_profile_guillot(SystemParameters: para.SystemParametersComposite,
                                  T_equ= T_equ)
     return temperature
 
+
 #%% Interpolate to spectrum wavelength grid
 def _interpolate_on_spectrum_grid(spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
                                   template_wavegrid: np.ndarray,
@@ -423,7 +424,6 @@ def _create_single_template(SystemParameters: para.SystemParametersComposite,
         wlen_bords_micron = [spectral_axis[0].to(u.um).value, # Spectrum wavelength-range
                              spectral_axis[-1].to(u.um).value], # Spectrum wavelength-range
         mode = 'lbl',
-        lbl_opacity_sampling = 7, # Downsample to roughly ESPRESSO resolution
         )
     
     # System parameters
@@ -478,8 +478,7 @@ def _create_single_template(SystemParameters: para.SystemParametersComposite,
             'species': species,
             }
         )
-    
-    
+
     return template
 
 #%% Create all available templates
@@ -560,5 +559,4 @@ if __name__ == '__main__':
     
     logger.info('Test of rats.modeling_CCF successful')
     
-
 

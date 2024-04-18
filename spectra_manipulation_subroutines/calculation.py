@@ -676,6 +676,7 @@ def _gain_weights(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
         case 'quadratic_combined':
             weights = weights.multiply(spectrum.uncertainty.array**2 * u.dimensionless_unscaled)
             weights = weights.multiply(spectrum.meta['delta']**2 * u.dimensionless_unscaled)
+            
     
     return weights
 
@@ -692,7 +693,7 @@ def _gain_weights_list(spectrum_list: sp.SpectrumList,
         Type of weighting, by default None.
         Options are:
             None:
-                No weights assumed
+                No weights assumed. This will return weights with np.isfinite(flux) value, to handle NaN values. 
             'Average_S_N':
                 Weights are scaled by average SNR.
             'quadratic':
@@ -720,9 +721,9 @@ def _gain_weights_list(spectrum_list: sp.SpectrumList,
             scale = [item.meta['Average_S_N']**2 for item in spectrum_list]* u.dimensionless_unscaled
         case 'quadratic_error':
             # TODO Check if this doesn't break for uncertainty = 0
-            scale = [item.uncertainty.array**2 for item in spectrum_list]* u.dimensionless_unscaled
+            scale = [item.uncertainty.array**(-2) for item in spectrum_list]* u.dimensionless_unscaled
         case 'quadratic_combined':
-            scale = [item.uncertainty.array**2 for item in spectrum_list]* u.dimensionless_unscaled
+            scale = [item.uncertainty.array**(-2) for item in spectrum_list]* u.dimensionless_unscaled
             scale *= [item.meta['delta']**2 for item in spectrum_list]* u.dimensionless_unscaled
     weights = weights.multiply(scale, axis=0)
     

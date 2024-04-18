@@ -16,3 +16,7 @@ saved_data/*
 
 # Logs
 *.log
+
+# Pycache
+/__pycache__/*
+/__pycache__/

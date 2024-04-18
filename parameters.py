@@ -110,6 +110,7 @@ def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
     NDDataArray
         Array including the uncertainty (if defined for a key), and reference in meta dictionary (if defined). NDDataArray supports error propagation.
     """
+    
     if (keyword + 'err1' in CompositeTableRow.keys() and
         keyword + '_reflink' in CompositeTableRow.keys()):
         logger.debug('Loading key:' + keyword)
@@ -120,7 +121,7 @@ def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
         parameter = NDDataArray(
             data= CompositeTableRow[keyword],
             uncertainty= StdDevUncertainty(
-                np.max([CompositeTableRow[keyword + 'err1'],
+                np.nanmax([CompositeTableRow[keyword + 'err1'],
                         CompositeTableRow[keyword + 'err2']]
                         )
                 ),
@@ -135,7 +136,7 @@ def _load_array_from_CompositeTable(CompositeTableRow: pd.DataFrame,
         parameter = NDDataArray(
             data= CompositeTableRow[keyword],
             uncertainty= StdDevUncertainty(
-                np.max([CompositeTableRow[keyword + 'err1'],
+                np.nanmax([CompositeTableRow[keyword + 'err1'],
                         CompositeTableRow[keyword + 'err2']]
                         )
                 ),
@@ -345,7 +346,8 @@ class _DetectionFlags():
     
 #%% Stellar parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
-class _StellarParameters(parautils.StellarModel):
+class _StellarParameters(parautils.StellarModel,
+                         parautils.LimbDarkening):
     """
     Class holding the stellar parameters.
     
@@ -419,12 +421,17 @@ class _StellarParameters(parautils.StellarModel):
         self.luminosity = _load_array_from_CompositeTable(CompositeTableRow, 'st_lum', 'Stellar luminosity')
         self.luminosity.unit = u.Lsun
         self.metallicity = _load_array_from_CompositeTable(CompositeTableRow, 'st_met', 'Stellar metalicity')
-        # TODO
+        # TODO units
         self.logg = _load_array_from_CompositeTable(CompositeTableRow, 'st_logg', 'Stellar logg')
+        self.logg.unit = u.cm / u.s / u.s
         self.age = _load_array_from_CompositeTable(CompositeTableRow, 'st_age', 'Stellar age')
+        self.age.unit = u.Gyr
         self.density = _load_array_from_CompositeTable(CompositeTableRow, 'st_dens', 'Stellar density')
+        self.density.unit = u.g / u.cm / u.cm / u.cm
         self.vsini = _load_array_from_CompositeTable(CompositeTableRow, 'st_vsin', 'Stellar vsini')
+        self.vsini.unit = u.km / u.s
         self.rotation_period = _load_array_from_CompositeTable(CompositeTableRow, 'st_rotp', 'Stellar rotation period')
+        self.rotation_period.unit = u.d
         self.magnitudes._load_values_from_composite_table(CompositeTableRow)
         
     def print_values(self):
@@ -844,6 +851,7 @@ class _EphemerisParameters():
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class SystemParametersComposite(parautils.CalculationTransitLength,
                                 parautils.CalculationSystem,
+                                parautils.ModellingLightCurve,
                                 # parautils.EquivalenciesTransmission,
                                 ):
     """

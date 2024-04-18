@@ -20,6 +20,8 @@ from itertools import repeat
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
+
+
 @time_function
 def cross_correlate_list(
     spectrum_list: sp.SpectrumList,
@@ -53,7 +55,7 @@ def cross_correlate_list(
     CCF_flux = np.zeros_like([velocities.value]*len(spectrum_list))
     
     if force_multiprocessing:
-        logger.warning('Starting multiprocessing - CCF calculation')
+        logger.warning('Starting multiprocessing - CCF calculation | This is extremely memory heavy.')
         with Pool(processes=16, maxtasksperchild=10) as p:
             CCF_flux = p.starmap(_CCF_multiprocessing_wrapper,
                                  zip(
@@ -73,9 +75,10 @@ def cross_correlate_list(
                 spectrum= model,
                 velocities= [-velocity]
                 )
-            CCF_flux[:, ind] = _calculate_CCF_single_velocity(spectrum_list= spectrum_list,
-                                                            shifted_model= shifted_model,
-                                                            sn_type= sn_type)
+            CCF_flux[:, ind] = _calculate_CCF_single_velocity(
+                spectrum_list= spectrum_list,
+                shifted_model= shifted_model,
+                sn_type= sn_type)
         
     CCF_list = sp.SpectrumList()
     
@@ -151,7 +154,7 @@ def _calculate_CCF_single_velocity(spectrum_list: sp.SpectrumList,
     weights = smcalc._gain_weights_list(spectrum_list, sn_type= sn_type)
     flux_list = astropy.nddata.NDDataArray([item.flux for item in spectrum_list])
     model_flux = np.repeat(shifted_model.flux[np.newaxis, :], len(spectrum_list), axis=0)
-    
+
     # Run the calculation of weighted CCF
     match type(shifted_model):
         case sp.Spectrum1D:

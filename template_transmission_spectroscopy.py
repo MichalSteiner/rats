@@ -5,6 +5,38 @@ Created on Wed Nov 16 12:04:14 2022
 
 Template for transmission spectroscopy pipeline using the RATS (Rapid Analysis of Transmission Spectra) package.
 
+Right now, there is no combinning instruments functionality. Therefore, use only single instrument data.
+
+In summary, the steps are:
+    0. Download data from DACE (other sources to be added)
+    1. Change the requested strings to relevant values:
+        1. data_directory = 'Add_directory_of_the_data_as_extracted_from_DACE'
+        2. main_directory = 'Add_main_directory_of_the_project'
+        3. planet_name= 'Name_of_the_planet_as_defined_by_NASA_archive'
+    2. By using the single_use module, create a tree directory automatically, and move the downloaded spectra to assumed directory. The extraction is done automatically, as it also replaces the ":" to "_" in the names, which breaks on the FAT filesystems.
+    3. Run molecfit. By default, this is interactivelly run for each night separately. After it is run once, this function is skipped.
+    4. Load system parameters. This is done through the NASA API TAP system. The system parameters class is not just a parameters container, it also includes multiple functionalities for the spectra, like calculation of velocities.
+        1. The relevant system parameters can be printed out with provided method.
+    5. Load all data. Right now this assumes ESO HARPS/NIRPS/ESPRESSO data, which uses the same DRS and format. Additional instruments will be added as needed/requested.
+        1. Each spectrum is a specutils.Spectrum1D (S1D, 1D spectrum) or specutils.SpectrumCollection (S2D, 2-D echelle spectrum) object. These object have several attributes:
+            1. spectral_axis : Wavelength or velocity (CCF) of given spectrum. Must be a astropy.units.Quantity
+            2. flux : Flux of given spectrum. Must be a astropy.units.Quantity.
+            3. uncertainty : Uncertainty of the spectrum. Must be a astropy.nddata.StdDevUncertainty object. This object propagades the uncertainties automatically, whenever the specutils/ astropy.nddata numerical operations are done. If using functions that are not provided by astropy/specutils (e.g., trigonometric functions), a wrapper is also provided using the uncertainties package.
+            4. meta : This is a dictionary holding any additional information for the spectrum. In particular, velocities of the star and planet, in/out-of transit flags, phase, rest frame informations and spectrum observation condition (seeing, airmass, etc) are provided.
+            5. mask : Mask for the spectrum. By default, astropy/specutils do not apply them. If need to be applied, there is a function in the spectra_manipulation module.
+            6. Few other attributes that are irrelevant for the discussion. However, there is the wcs attribute (World Coordinate System), which is not pickle-able by pickle package. If need to pickle the objects, use the dill package.
+    6. Standard transmission spectroscopy reduction:
+        0. Run telluric correction (done in step 3. already). The output needs to be loaded by mol.molecfit_new_output() method
+        1. Re-interpolate the spectra on the common wavelength grid.
+        2. Normalize the spectrum.
+        3. Shift spectra to rest frame of the star
+        4. Calculate master-out spectrum
+        5. Apply master-out correction on the entire dataset.
+        6. Shift spectra to rest frame of the planet.
+        7. Calculate master-in (combined transmission) spectrum.
+        8. Characterize the combined transmission spectrum
+
+
 @author: chamaeleontis
 """
 # =============================================================================
@@ -18,6 +50,7 @@ import load.eso as eso # Loading ESO instruments
 import rats.parameters as para # System parameters
 import rats.single_use as su # Single use functions
 import rats.plot_spectra as ps # Spectra plotting
+import rats.load.molecfit as molload # Molecfit loading functions
 import rats.spectra_manipulation as sm # Spectra manipulation
 import rats.table as tab # Table creation
 import rats.plot_functions as pf # Plot functions
@@ -58,6 +91,7 @@ figure_directory = main_directory + '/figures'
 #%% Movement of data to predefined directory tree
 # FIXME: Run once, then comment/remove this cell. 
 # If not commented, it will be ignored as long as the zip file downloaded from DACE has been extracted.
+# TODO: Do an assert test on existence of files instead
 su.setup_routine(original_directory= data_directory,
                  main_directory= main_directory,
                  file_types= ['S1D',
@@ -103,11 +137,11 @@ system_parameters.print_main_values()
 # =============================================================================
 # S1D - simplest to use, by default
 # =============================================================================
-data_raw_A = eso.load_all(main_directory= main_directory,
-                          spectra_format= 'S1D_SKYSUB',
-                          fiber= 'A',
-                          force_skip = force_skip
-                          )
+# data_raw_A = eso.load_all(main_directory= main_directory,
+#                           spectra_format= 'S1D_SKYSUB',
+#                           fiber= 'A',
+#                           force_skip = force_skip
+#                           )
 
 # data_deblaze_s1d_B = eso.load_all(directory_spectra,
 #                                   'Fiber_B',
@@ -123,9 +157,11 @@ data_raw_A = eso.load_all(main_directory= main_directory,
 # =============================================================================
 # Molecfit corrected spectra
 # =============================================================================
-# data_raw_A, telluric_profiles, data_uncorrected = mol.molecfit_new_output(
-#                         instrument_directory = directory_spectra,
-#                         spec_type='S1D')
+data_raw_A, telluric_profiles, data_uncorrected = molload.molecfit_output(
+                        main_directory = main_directory,
+                        spectrum_type='S1D',
+                        mask_threshold= 0.
+                        )
 #%% Telluric quality control
 # =============================================================================
 # Calculates master of uncorrected and telluric corrected spectra
@@ -143,13 +179,7 @@ data_raw_A = eso.load_all(main_directory= main_directory,
 #%% Define phases, velocities and transit values
 system_parameters.spectra_transit_flags(data_raw_A)
 system_parameters.calculate_velocities_list(data_raw_A)
-
-#%% Calculate master A and B spectrum
-# =============================================================================
-# Calculate master fiber A and B spectrum
-# =============================================================================
-fiber_A_master = sm.calculate_master_list(data_deblaze_s1d_A,key = None,)
-fiber_B_master = sm.calculate_master_list(data_deblaze_s1d_B,key = None,)
+system_parameters.add_velocity_system_in_list(data_raw_A)
 #%% Plot both fibers combined
 # =============================================================================
 # Plot both masters combined
@@ -208,10 +238,10 @@ fiber_B_master = sm.calculate_master_list(data_deblaze_s1d_B,key = None,)
 # Replace the input of sm.binning list for S2D spectra
 # TODO: Replace these functions with save/load-able pickles for the code to run faster
 # =============================================================================
-data_deblaze_s1d_A_sorted = sm.sort_spectrum_list(data_deblaze_s1d_A,
-                                              force_skip = force_skip
-                                              )
-data_binned = sm.binning_list(data_deblaze_s1d_A_sorted,
+data_raw_A = sm.sort_spectrum_list(data_raw_A,
+                                   force_skip = force_skip
+                                   )
+data_binned = sm.binning_list(data_raw_A,
                               force_skip = force_skip
                               )
 data_normalized = sm.normalize_list(data_binned,
@@ -251,14 +281,14 @@ data_SRF = sm.shift_list(data_cosmic_corrected,
 # If RM effect is significant, include the obliquity and vsini values
 # =============================================================================
 master_SRF_out = sm.calculate_master_list(data_SRF,
-                                          key = 'Transit',
+                                          key = 'Transit_partial',
                                           value =False,
                                           force_load = force_load,
                                           force_skip = force_skip,
                                           pkl_name = 'master_out_SRF.pkl'
                                           )
 master_SRF_int = sm.calculate_master_list(data_SRF,
-                                          key = 'Transit',
+                                          key = 'Transit_partial',
                                           value =True,
                                           force_load = force_load,
                                           force_skip = force_skip,
@@ -270,9 +300,7 @@ data_out_corrected = sm.spec_list_master_correct(data_SRF,
                                                  force_skip = force_skip,
                                                  pkl_name = 'star_corrected_noRM.pkl'
                                                  )
-# RM_star_56,RM_star_56_all = sm.rm_list_correct(star_56,
-#                                 master_RF_star_oot_56,
-#                                 sys_para)
+
 #%% Shifting to RF planet
 # =============================================================================
 # Shift the data to planetary rest frame
@@ -297,7 +325,7 @@ data_PRF = sm.shift_list(data_out_corrected,
 # transfered with .to(unit) command (F, R_plam, H_num, delta_lam) 
 # =============================================================================
 transmission_spectrum = sm.calculate_master_list(data_PRF,
-                                                 key = 'Transit',
+                                                 key = 'Transit_full',
                                                  value =True,
                                                  sn_type='quadratic',
                                                  force_load = force_load,
@@ -305,7 +333,7 @@ transmission_spectrum = sm.calculate_master_list(data_PRF,
                                                  pkl_name = 'transmission_spectrum.pkl'
                                                  )
 out_spectrum = sm.calculate_master_list(data_PRF,
-                                        key = 'Transit',
+                                        key = 'Transit_full',
                                         value =False,
                                         sn_type='quadratic',
                                         force_load = force_load,
@@ -325,22 +353,3 @@ ps.plot_transmission_spectrum(transmission_spectrum,
                               )
 
 
-
-#%% Loading exoplanet table 
-# =============================================================================
-# Load the observed exoplanet class, calculate scale height for them
-# =============================================================================
-exo_class = para.observed_exoplanets()
-exo_class.calculate_scale_height()
-
-#%% Plotting exoplanet figure Mass vs Insolation flux
-# =============================================================================
-# Radius-insolation plot
-# =============================================================================
-# TODO: Change the handles of planets highlighted
-# TODO: Change the systems highlighted
-fig, ax = pf.radius_insolation_plot(
-    exo_class,
-    [['Enter_names_of_the_planets_to_highlight']],
-    [['Enter_labels_of_the_planets_to_highlight']],
-    )

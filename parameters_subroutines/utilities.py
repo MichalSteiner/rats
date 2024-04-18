@@ -5,9 +5,10 @@ import astropy
 import specutils as sp
 from astropy.nddata import NDData, StdDevUncertainty, NDDataArray
 import logging
-from rats.utilities import default_logger_format
+from rats.utilities import default_logger_format, time_function
 import rats.ndarray_utilities as ndutils
 import numpy as np
+from functools import lru_cache
 import matplotlib.pyplot as plt
 #%% Setting up logging
 logger = logging.getLogger(__name__)
@@ -653,30 +654,8 @@ class CalculationTransitLength:
         return
     
     
-    def _transit_model(self,
-                       start,
-                       end,
-                       number_of_steps):
-        import batman
-        params = batman.TransitParams()
-        
-        params.t0 = 0.                       #time of inferior conjunction
-        params.per = 1.                      #orbital period
-        params.rp = 0.1                      #planet radius (in units of stellar radii)
-        params.a = 15.                       #semi-major axis (in units of stellar radii)
-        params.inc = 87.                     #orbital inclination (in degrees)
-        params.ecc = 0.                      #eccentricity
-        params.w = 90.                       #longitude of periastron (in degrees)
-        params.limb_dark = "uniform"       #limb darkening model
-        t = np.linspace(start, end, number_of_steps)
-        m = batman.TransitModel(params, t)    #initializes model
-        flux = m.light_curve(params)          #calculates light curve
-        
-        return
-    
 class EquivalenciesTransmission:
-    
-    
+
     def _custom_transmission_units(self):
         """
         Defines transmission spectrum specific units for given planet. Conversion equations are available at https://www.overleaf.com/read/gkdtkqvwffzn
@@ -794,3 +773,101 @@ class StellarModel():
                 },
             )
         return stellar_spectrum
+    
+class LimbDarkening:
+
+    def calculate_limb_darkening_coefficients(self):
+        """
+        Response functions can be downloaded here: http://svo2.cab.inta-csic.es/theory/fps/index.php?id=SLOAN/SDSS.u&&mode=browse&gname=SLOAN&gname2=SDSS#filter
+        
+        Better way is to create a proxy-filter for given wavelength range of an instrument.
+        
+        _summary_
+        """
+        import sys
+        from uncertainties import ufloat
+        #DOCUMENTME
+        # FIXME: This is dumb!
+        sys.path.append('/media/chamaeleontis/Observatory_main/Code/LDCU-main')
+        
+        import get_lds_with_errors_v3 as glds
+
+        star = {"Teff": ufloat(self.temperature.data,
+                               self.temperature.uncertainty.array),       # K
+                "logg": ufloat(self.logg.data,
+                               self.logg.uncertainty.array),     # cm/s2 (= log g)
+                "M_H": ufloat(self.metallicity.data,
+                              self.metallicity.uncertainty.array),      # dex (= M/H)
+                "vturb": None}                  # km/s
+
+        # list of response functions (pass bands) to be used
+        RF_list = ["espresso_uniform.dat"]
+
+        # query the ATLAS and PHOENIX database and build up a grid of available models
+        #   (to be run only once each)
+        glds.update_atlas_grid()
+        glds.update_phoenix_grid()
+
+        # compute the limb-darkening coefficients
+        ldc = glds.get_lds_with_errors(**star, RF=RF_list)
+
+        # print and/or store the results
+        header = glds.get_header(**star)
+        summary = glds.get_summary(ldc)
+        logger.print(summary)
+        logger.print('Taking the values of "Quadratic" law, Merged, ALL')
+        logger.print(f"    {ldc['espresso_uniform.dat']['quadratic']['Merged']['ALL'][0][0]}")
+        logger.print(f"    {ldc['espresso_uniform.dat']['quadratic']['Merged']['ALL'][1][0]}")
+        logger.warning("Don't forget to cite LDCU code!")
+        return ldc['espresso_uniform.dat']['quadratic']['Merged']['ALL'][0][0], ldc['espresso_uniform.dat']['quadratic']['Merged']['ALL'][1][0]
+
+class ModellingLightCurve:
+    def model_light_curve(self):
+        """
+        Creates a model light-curve with quadratic limb-darkening.
+        
+        The limb-darkening coefficients are calculated with LDCU.
+        
+        
+        """
+        
+        
+        import batman
+        #DOCUMENTME
+        u1, u2 = self.Star.calculate_limb_darkening_coefficients()
+        
+        params = batman.TransitParams()
+        params.t0 = self.Ephemeris.transit_center.data                       #time of inferior conjunction
+        params.per = self.Ephemeris.period.data                      #orbital period
+        params.rp = self.Planet.rprs.data                      #planet radius (in units of stellar radii)
+        params.a = self.Planet.a_rs_ratio.data                       #semi-major axis (in units of stellar radii)
+        params.inc = self.Planet.inclination.data                     #orbital inclination (in degrees)
+        params.ecc = self.Planet.eccentricity.data                      #eccentricity
+        if np.isnan(self.Planet.argument_of_periastron.data):
+            argument_of_periastron = 90
+        else:
+            argument_of_periastron = self.Planet.argument_of_periastron.data
+        params.w = argument_of_periastron                       #longitude of periastron (in degrees)
+        params.u = [u1, u2]                #limb darkening coefficients [u1, u2]
+        params.limb_dark = "quadratic"       #limb darkening model
+        
+        self.lc_params = params
+        
+        
+        
+        return
+    
+    def add_transit_depth_value(self,
+                                spectrum_list: sp.SpectrumList):
+        #DOCUMENTME
+        import batman
+        
+        t = np.asarray([spectrum.meta['BJD'].value for spectrum in spectrum_list])
+        lc_model = batman.TransitModel(self.lc_params, t)    #initializes model
+        transit_depth = lc_model.light_curve(self.lc_params)          #calculates light curve
+        
+        for ind, spectrum in enumerate(spectrum_list):
+            spectrum.meta['light_curve_flux'] = transit_depth[ind]
+            spectrum.meta['delta'] = 1-transit_depth[ind]
+        
+        return
