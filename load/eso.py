@@ -568,8 +568,10 @@ def _find_nb_orders(header: np.ndarray) -> int:
     '''
     if header['INSTRUME'] == 'ESPRESSO':
          nb_orders = 170
-    elif header['INSTRUME'] == 'HARPS':
+    elif header['INSTRUME'] == 'HARPS' and '_A' in header['PIPEFILE']: 
         nb_orders = 71
+    elif header['INSTRUME'] == 'HARPS' and '_B' in header['PIPEFILE']: # Missing order in fiber B
+        nb_orders = 70
     elif header['INSTRUME'] == 'NIRPS':
         nb_orders = 70  
     else:

@@ -197,10 +197,40 @@ class CalculationSystem:
             )
         )
         
-        # vel_star = sys_para.planet.semiamp_s.to(u.m/u.s) * \
-        # (np.cos(true_anomaly+omega) + sys_para.planet.e * np.cos(omega))
         return stellar_velocity
     
+    def calculate_local_stellar_velocity(self,
+                                          spectrum_list: sp.SpectrumList):
+        """
+        Calculate local stellar velocity for each spectrum in list.
+        
+        Equation used comes from Steiner+2023, section 5.2
+
+        Parameters
+        ----------
+        spectrum_list : sp.SpectrumList
+            Spectrum list to calculate local stellar velocity for
+        """
+
+        for spectrum in spectrum_list:
+            if not(spectrum.meta['Transit_partial']):
+                spectrum.meta['velocity_stellar_local'] = None
+            else:
+                spectrum.meta['velocity_stellar_local'] = (
+                    self.Planet.semimajor_axis.divide(self.Star.radius).convert_unit_to(u.dimensionless_unscaled)).multiply(
+                        (
+                            (ndutils._sin_NDDataArray(spectrum.meta['Phase'].multiply(2*np.pi*u.rad))).multiply(
+                                ndutils._cos_NDDataArray(self.Planet.projected_obliquity)
+                                ).add(
+                            ndutils._cos_NDDataArray(spectrum.meta['Phase'].multiply(2*np.pi*u.rad)).multiply(
+                                ndutils._cos_NDDataArray(self.Planet.inclination)).multiply(
+                                    ndutils._sin_NDDataArray(self.Planet.projected_obliquity))
+                                )
+                                ).multiply(
+                                    self.Star.vsini
+                                )
+                        )
+        return
     
     
     def _calc_true_anom(self, phase: float | NDDataArray) -> NDDataArray:

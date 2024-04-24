@@ -509,72 +509,74 @@ def add_sig_lim(ax,spectrum,sys_para):
 # TODO: Redo plots so they work with a new decorator
 # TODO: Documentation once redone
 # =============================================================================
+
+
 # @todo_function
 # @save_figure
-# def plot_transmission_spectrum(transmission_list:list,
-#                                sys_para: rats.parameters.system_parameters_class,
-#                                line_list:list=[],
-#                                wave_region:sp.spectra.spectral_region.SpectralRegion = sp.SpectralRegion(5000*u.AA,7000*u.AA),
-#                                binning_factor:int = 15,
-#                                unit=u.dimensionless_unscaled,
-#                                equivalency = None,
-#                                fig_name = '',
-#                                ):
+def plot_transmission_spectrum(transmission_list:list,
+                            #    sys_para: rats.parameters.system_parameters_class,
+                               line_list:list=[],
+                               wave_region:sp.spectra.spectral_region.SpectralRegion = sp.SpectralRegion(5000*u.AA,7000*u.AA),
+                               binning_factor:int = 15,
+                               unit=u.dimensionless_unscaled,
+                               equivalency = None,
+                               fig_name = '',
+                               ):
     
-#     figure_list = []
+    figure_list = []
     
-#     for ni,transmission in enumerate(transmission_list):
-#         if ni > 0:
-#             continue
-#         fig,ax = plt.subplots(1)
+    for ni,transmission in enumerate(transmission_list):
+        if ni > 0:
+            continue
+        fig,ax = plt.subplots(1)
         
-#         # Extract smaller wave regions for faster plotting
-#         # cut_transmission = transmission
-#         cut_transmission = sm.extract_region_list([transmission],wave_region)[0]
+        # Extract smaller wave regions for faster plotting
+        # cut_transmission = transmission
+        cut_transmission = sm.extract_region_list([transmission],wave_region)[0]
         
         
-#         # Plot entire transmission spectrum
-#         ax.errorbar(cut_transmission.spectral_axis.value,
-#                     cut_transmission.flux.value,
-#                     cut_transmission.uncertainty.array,
-#                     color = 'black',
-#                     label = '_nolegend_',
-#                     zorder = 500,
-#                     fmt='.',
-#                     markersize=10,
-#                     elinewidth=1,
-#                     alpha=0.4
-#                           )
+        # Plot entire transmission spectrum
+        ax.errorbar(cut_transmission.spectral_axis.value,
+                    cut_transmission.flux.value,
+                    cut_transmission.uncertainty.array,
+                    color = 'black',
+                    label = '_nolegend_',
+                    zorder = 500,
+                    fmt='.',
+                    markersize=10,
+                    elinewidth=1,
+                    alpha=0.4
+                          )
         
-#         # Disable binning by having binning factor of 0
-#         if binning_factor != 0:
-#             x,y,yerr = sm.binning_spectrum(cut_transmission,binning_factor) 
-#             ax.errorbar(x,
-#                         y,
-#                         yerr,
-#                         color ='royalblue',
-#                         ecolor = 'cornflowerblue',
-#                         label = '_nolegend_',
-#                         zorder = 501,
-#                         fmt='.',
-#                         markersize='20',
-#                         markeredgecolor='black',
-#                         markeredgewidth = 1,
-#                         )
+        # Disable binning by having binning factor of 0
+        if binning_factor != 0:
+            x,y,yerr = sm.binning_spectrum(cut_transmission,binning_factor) 
+            ax.errorbar(x,
+                        y,
+                        yerr,
+                        color ='royalblue',
+                        ecolor = 'cornflowerblue',
+                        label = '_nolegend_',
+                        zorder = 501,
+                        fmt='.',
+                        markersize='20',
+                        markeredgecolor='black',
+                        markeredgewidth = 1,
+                        )
         
-#         for line in line_list:
-#             ax.axvline(line,
-#                        color='darkblue',
-#                        ls='--',
-#                        )
+        for line in line_list:
+            ax.axvline(line,
+                       color='darkblue',
+                       ls='--',
+                       )
             
-#         # ps.add_sig_lim(ax,spectrum,sys_para)
-#         ax.axhline(sys_para.transit.delta,color='white')
-#         ax_percentage(ax)
-#         ax.set_ylabel('$R_{p,\lambda}^2/R_s^2$')
-#         ax.set_xlabel('Wavelength [$\AA%$]',labelpad=0)
-#         ax.legend(['Night %i'%(ni)])
-#         ax.set_ylim(.95,1.05)
+        # ps.add_sig_lim(ax,spectrum,sys_para)
+        # ax.axhline(sys_para.transit.delta,color='white')
+        ax_percentage(ax)
+        ax.set_ylabel('$R_{p,\lambda}^2/R_s^2$')
+        ax.set_xlabel('Wavelength [$\AA%$]',labelpad=0)
+        ax.legend(['Night %i'%(ni)])
+        ax.set_ylim(.95,1.05)
         
-#         figure_list.append([fig, [ax]])
-#     return figure_list
+        figure_list.append([fig, [ax]])
+    return figure_list

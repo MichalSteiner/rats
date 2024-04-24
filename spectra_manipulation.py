@@ -850,7 +850,7 @@ def _compare_masks(spectral_axis: sp.SpectralAxis,
 @progress_tracker
 @skip_function
 def binning_list(spectrum_list: sp.SpectrumList,
-                 force_multiprocessing:bool = True,
+                 force_multiprocessing:bool = False,
                  force_skip:bool =False,
                  new_spectral_axis: None | sp.spectra.spectral_axis.SpectralAxis = None) -> sp.SpectrumList:
     """
@@ -1024,7 +1024,7 @@ def _normalize_spectrum_quantile(spectrum: sp.Spectrum1D | sp.SpectrumCollection
 def normalize_list(spectrum_list: sp.SpectrumList,
                    quantile: float= .85,
                    polyfit_order: int | None= None,
-                   force_multiprocessing: bool= True,
+                   force_multiprocessing: bool= False,
                    force_load:bool= False,
                    force_skip:bool= False) -> sp.SpectrumList:
     """
@@ -1163,7 +1163,7 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
     value : None | str, optional
         Value which is used for filtering the spectrum_list, by default None
     sn_type : None | str, optional
-        Type of weighting, by default 'quadratic'. Check rats.spectra_manipulation_subroutines.calculation._gain_weights() for more details.
+        Type of weighting, by default None. Check rats.spectra_manipulation_subroutines.calculation._gain_weights() for more details.
     method : str, optional
         Method which to use to generate the master, by default 'average'
     force_load : bool, optional

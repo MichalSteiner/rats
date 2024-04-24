@@ -2,24 +2,34 @@ from rats.StarRotator.StarRotator import StarRotator
 import matplotlib.pyplot as plt
 import numpy as np
 from rats.parameters import SystemParametersComposite
-from rats.utilities import default_logger_format
+from rats.utilities import default_logger_format, save_and_load, progress_tracker
 import logging
 import astropy.units as u
 import os
-
-
+import pysme
+import specutils as sp
 # Setup logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
-
+@progress_tracker
+@save_and_load
 def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
                           linelist: str,
-                          number_of_exposures: int = 40,
+                          number_of_exposures: int | sp.SpectrumList = 40,
+                          force_load: bool = False,
+                          force_skip: bool = False,
+                          pkl_name: str = 'transmission_spectrum.pkl'
                           ) -> StarRotator:
-    
-    t1 = -SystemParameters.Ephemeris.transit_length_full.convert_unit_to(u.d).data / SystemParameters.Ephemeris.period.data / 2
-    t4 = -t1
+    if type(number_of_exposures) == sp.SpectrumList:
+        phases = [spectrum.meta['Phase'].data for spectrum in number_of_exposures if spectrum.meta['Transit_partial']]
+        start_wlg, end_wlg = number_of_exposures[0].spectral_axis[0].to(u.nm).value, number_of_exposures[0].spectral_axis[-1].to(u.nm).value
+    else:
+        t1 = -SystemParameters.Ephemeris.transit_length_partial.convert_unit_to(u.d).data / SystemParameters.Ephemeris.period.data / 2
+        t4 = -t1
+        phases = np.linspace(t1, t4, number_of_exposures)
+        start_wlg, end_wlg = 586.0,592.0
+           
     input_dictionary = {
         'veq': SystemParameters.Star.vsini.data,
         'stelinc': 90.0,
@@ -39,15 +49,13 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
         'obliquity': SystemParameters.Planet.projected_obliquity.data,
         'RpRs': SystemParameters.Planet.rprs.data,
         'P': SystemParameters.Ephemeris.period.data,
-        'phases': np.linspace(t1, t4, number_of_exposures),
+        'phases': phases,
         'grid_model': '',
         'abund': {},
         'linelist_path': linelist
         }
-    
     input_dictionary = _correct_NaNs(input_dictionary)
-    RM_model = StarRotator(586.0,592.0,200.0,input=input_dictionary)
-    
+    RM_model = StarRotator(start_wlg,end_wlg,200.0,input=input_dictionary)
     return RM_model
 def _correct_NaNs(input_dictionary: dict) -> dict:
     

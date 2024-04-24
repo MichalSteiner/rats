@@ -46,7 +46,7 @@ In summary, the steps are:
 #%% Importing libraries
 # Rats library - custom TS pipeline
 import rats
-import load.eso as eso # Loading ESO instruments
+import rats.load.eso as eso # Loading ESO instruments
 import rats.parameters as para # System parameters
 import rats.single_use as su # Single use functions
 import rats.plot_spectra as ps # Spectra plotting
@@ -56,7 +56,7 @@ import rats.table as tab # Table creation
 import rats.plot_functions as pf # Plot functions
 from rats.utilities import default_logger_format
 # import rats.molecfit as mol # Molecfit loading functions
-import rats.spectra_ccf as ccf # CCF functions
+import rats.spectra_cross_correlate as ccf # CCF functions
 import rats.run_molecfit_all as mol # Functions to run molecfit
 # Matplotlib and seaborn
 import matplotlib as mpl
@@ -80,6 +80,7 @@ logger = default_logger_format(logger)
 #%% Flags to force loads and skips of functions
 force_load = False # True = Loads output of functions instead of Calculation
 force_skip = False # True = Skips running the function instead of loading/calculation
+force_multiprocessing = False
 #%% Setup of directories and movement of files from downloaded folder
 # FIXME: Change the filepaths
 data_directory = 'Add_directory_of_the_data_as_extracted_from_DACE'
@@ -143,11 +144,11 @@ system_parameters.print_main_values()
 #                           force_skip = force_skip
 #                           )
 
-# data_deblaze_s1d_B = eso.load_all(directory_spectra,
-#                                   'Fiber_B',
-#                                   'S1D',
-#                                   force_skip = force_skip
-#                                   )
+# data_raw_B = eso.load_all(main_directory= main_directory,
+#                           spectra_format= 'S1D',
+#                           fiber= 'B',
+#                           force_skip = force_skip
+#                           )
 # =============================================================================
 # S2D - easiest to handle after order extraction, molecfit correction annoying
 # Good for single species check
@@ -167,14 +168,7 @@ data_raw_A, telluric_profiles, data_uncorrected = molload.molecfit_output(
 # Calculates master of uncorrected and telluric corrected spectra
 # Overplot it with telluric profile to check for potential spurious feature
 # =============================================================================
-# template_list_petitradtrans = rats.modeling_CCF.create_all_available_templates(
-#     SystemParameters= system_parameters,
-#     spectral_axis= data_raw_A[0].spectral_axis,
-#     MMW_value= 2.33,
-#     force_load= False,
-#     force_skip= False,
-#     pkl_name= save_directory + 'petitRADtrans_templates.pkl'
-#     )
+
 
 #%% Define phases, velocities and transit values
 system_parameters.spectra_transit_flags(data_raw_A)
@@ -195,7 +189,7 @@ system_parameters.add_velocity_system_in_list(data_raw_A)
 # Removing entire night (weather conditions)
 # See documentation of sm.get_sublist() function for more information 
 # =============================================================================
-# data_deblaze_s1d_A = sm.get_sublist(data_deblaze_s1d_A,'S_N',10,mode='more')
+# data_deblaze_s1d_A = sm.get_sublist(data_deblaze_s1d_A,'Average_S_N',10,mode='more')
 
 #%% Create observational log + table
 # =============================================================================

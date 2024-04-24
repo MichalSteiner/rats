@@ -16,7 +16,7 @@
     - TODO: Create a script to run in terminal for automatic setup of these.
     
 ## Before use:
-  - Few modules are depending on external libraries, that need further setup. Generally, this includes filepaths.
+  - Few modules are depending on external libraries, that need further setup. Generally, this includes filepaths to the external libraries.
   - TODO: The setup will be moved to singular file
 
 ### molecfit:
@@ -36,6 +36,7 @@
 ### StarRotator:
   - Before use:
     - A filepath to main directory of the code needs to be provided.
+    - TODO: Implement the code so StarRotator is loaded as external library, instead of being within the RATS package
 
 ## To be done:
  - Upper-limits calculation for non-detection
