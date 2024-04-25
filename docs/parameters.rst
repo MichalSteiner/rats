@@ -38,8 +38,11 @@ week the TAP service is being updated. Meaning, if you run this line multiple ti
 
 .. important::
 
-    This code is still under development and bugs might be present. In case you encounter some bug, please send the
-description to Michal.Steiner@unige.ch or create a new issue on GitHub. You can also use either of these to request a feature.
+    The NASA Exoplanet Composite Table does not necessarily provide most precise parameters. Always verify the
+parameters provided with scientific literature. Furthermore, if analyzing old data, a less recent ephemeris might be
+more precise due to closer mid transit value (the uncertainty scales with number of orbits passed since the mid
+transit).
+
 
 .. important::
 
