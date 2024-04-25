@@ -9,7 +9,7 @@
 project = 'RATS'
 copyright = '2024, Michal Steiner'
 author = 'Michal Steiner'
-release = '0.1.0 (alpha)'
+release = '0.3.1 (alpha)'
 
 import sys, os
 sys.path.append('/media/chamaeleontis/Observatory_main/Code/observations_transits/rats')
