@@ -5,7 +5,7 @@ contain the root `toctree` directive.
 
 System parameters class
 ==============================
-`RATS` (Revealing Atmospheres with Transmission Spectroscopy) way of handling system parameters. System parameters
+`RATS` module for handling system parameters. System parameters
 are saved in a class system, several of which exists. The typical one is the `SystemParametersComposite` class, which
 contains the information of planet, star and system.
 
@@ -46,8 +46,12 @@ transit).
 
 .. important::
 
-    If you use this code, please cite Steiner et al. (2023). In future, more up-to-date reference will be available. Some modules also require additional external packages, please cite these as well. More specific instructions will be added in future.
+    Please always cite all sources that have been used. For system parameter class, a method for generating LaTeX
+table will be available soon [WIP].
 
+.. important::
+    Currently, no class for all exoplanets system is available. A similar class will be developed for plotting
+diagrams of exoplanets population eventually, but this is currently low priority. Only the full
 
 
 Indices and tables
