@@ -1042,3 +1042,8 @@ cython_debug/
 .idea/webResources.xml
 .idea/codeStyles/codeStyleConfig.xml
 .idea/inspectionProfiles/profiles_settings.xml
+.vscode/launch.json
+.vscode/settings.json
+_to_be_added/calculate_transit_windows.rst
+_to_be_added/Get started.rst
+_to_be_added/parameters.rst
