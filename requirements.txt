@@ -16,4 +16,3 @@ colorlog
 petitRADTRANS
 pysme-astro
 screeninfo
-sphinx-automodapi

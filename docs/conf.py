@@ -33,8 +33,8 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'sphinx.ext.napoleon',
-    # 'sphinx_automodapi.automodapi',
-    'nbsphinx'
+    'nbsphinx',
+    'plasmapy_sphinx'
 ]
 
 templates_path = ['_templates']
