@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Get started!
-==============================
+Revealing Atmospheres with Transmission Spectroscopy
+======================================================
 Welcome to `RATS` (Revealing Atmospheres with Transmission Spectroscopy) package. This package allows extraction of high-resolution transmission spectroscopy, in particular from fiber-fed spectrographs like ESPRESSO and HARPS (although modification for other packages is mostly trivial). While currently the main focus is on high-resolution transmission spectroscopy, the Rossiter-McLaughlin effect analysis will be added soon. Furthermore, emission spectroscopy at high-resolution can also in principle be performed with minor modifications, though it has been completely untested.
 
 .. important::

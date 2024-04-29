@@ -20,6 +20,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/MichalSteiner/rats"
 Issues = "https://github.com/MichalSteiner/rats/issues"
+documentation = "https://rats-package.readthedocs.io/en/latest/#indices-and-tables"
 
 [tool.setuptools.packages.find]
 include = ["rats"]  # package names should match these glob patterns (["*"] by default)
