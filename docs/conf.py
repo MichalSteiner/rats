@@ -11,18 +11,18 @@ copyright = '2024, Michal Steiner'
 author = 'Michal Steiner'
 release = '0.3.1 (alpha)'
 
-import sys, os
-sys.path.append('/media/chamaeleontis/Observatory_main/Code/observations_transits/rats')
-sys.path.append('/media/chamaeleontis/Observatory_main/Code/observations_transits/OT/OT')
+# import sys, os
+# sys.path.append('/media/chamaeleontis/Observatory_main/Code/observations_transits/rats')
+# sys.path.append('/media/chamaeleontis/Observatory_main/Code/observations_transits/OT/OT')
 
-def patch_automodapi(app):
-    """Monkey-patch the automodapi extension to exclude imported members"""
-    from sphinx_automodapi import automodsumm
-    from sphinx_automodapi.utils import find_mod_objs
-    automodsumm.find_mod_objs = lambda *args: find_mod_objs(args[0], onlylocals=True)
+# def patch_automodapi(app):
+#     """Monkey-patch the automodapi extension to exclude imported members"""
+#     from sphinx_automodapi import automodsumm
+#     from sphinx_automodapi.utils import find_mod_objs
+#     automodsumm.find_mod_objs = lambda *args: find_mod_objs(args[0], onlylocals=True)
 
-def setup(app):
-    app.connect("builder-inited", patch_automodapi)
+# def setup(app):
+#     app.connect("builder-inited", patch_automodapi)
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
