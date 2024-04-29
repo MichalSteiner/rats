@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rats-transmission"
+version = "0.3.1"
+authors = [
+  { name="Michal Steiner", email="michal.steiner@unige.ch" },
+]
+description = "Revealing Atmospheres with Transmission Spectroscopy"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/MichalSteiner/rats"
+Issues = "https://github.com/MichalSteiner/rats/issues"
+
+[tool.setuptools.packages.find]
+include = ["rats"]  # package names should match these glob patterns (["*"] by default)
+
+[tool.setuptools.package-dir]
+rats = "rats"
