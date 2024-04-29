@@ -40,7 +40,7 @@ Welcome to your documentation.
    :maxdepth: 2
    :caption: Modules
 
-.. automodapi:: rats.spectra_manipulation
+.. automodapi:: rats
 
 Get Started
 ===========

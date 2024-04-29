@@ -53,7 +53,6 @@ table will be available soon [WIP].
 diagrams of exoplanets population eventually, but this is currently low priority. Only the full
 
 
-.. automodapi:: rats.parameters
 
 Indices and tables
 ==================
