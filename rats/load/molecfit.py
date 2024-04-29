@@ -72,6 +72,9 @@ def molecfit_output(main_directory: str,
                 telluric_profiles.append(telluric_profile)
                 uncorrected_spectra.append(uncorrected_spectrum)
                 
+                corrected_spectrum.meta['Night'] = night
+                telluric_profile.meta['Night'] = night
+                uncorrected_spectrum.meta['Night'] = night
     
     eso._numbering_nights(corrected_spectra)
     eso._numbering_nights(uncorrected_spectra)

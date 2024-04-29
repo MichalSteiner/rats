@@ -436,7 +436,7 @@ class CalculationTransitLength:
             
             nominator_squareroot = ndutils._power_NDDataArray(nominator_unrooted, power= (1/2))
             denominator = ndutils._sin_NDDataArray(self.Planet.inclination)
-            term_inside_sinus = scale.multiply(nominator_squareroot).divide(denominator)
+            term_inside_sinus = scale.multiply(nominator_squareroot).divide(denominator).convert_unit_to(u.dimensionless_unscaled)
             
             # Eccentricity scale factor of equation 16 in Winn (2014)
             eccentricity_nominator = ndutils._power_NDDataArray(
@@ -488,7 +488,7 @@ class CalculationTransitLength:
             
             nominator_squareroot = ndutils._power_NDDataArray(nominator_unrooted, power= (1/2))
             denominator = ndutils._sin_NDDataArray(self.Planet.inclination)
-            term_inside_sinus = scale.multiply(nominator_squareroot).divide(denominator)
+            term_inside_sinus = scale.multiply(nominator_squareroot).divide(denominator).convert_unit_to(u.dimensionless_unscaled)
             
             
             # Eccentricity scale factor of equation 16 in Winn (2014)
@@ -880,6 +880,9 @@ class ModellingLightCurve:
         params.w = argument_of_periastron                       #longitude of periastron (in degrees)
         params.u = [u1, u2]                #limb darkening coefficients [u1, u2]
         params.limb_dark = "quadratic"       #limb darkening model
+        
+        self.Star.LimbDarkening_u1 = u1
+        self.Star.LimbDarkening_u2 = u2
         
         self.lc_params = params
         

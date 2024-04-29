@@ -268,7 +268,8 @@ def progress_tracker(func):
 
         '''
         
-        logger.info('Currently working on: \n'+f'    {func.__name__}')
+        logger.info('Currently working on:')
+        logger.info(f'    {func.__name__}')
         output = func(*args,**kwargs)
         return output
     

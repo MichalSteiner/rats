@@ -438,6 +438,10 @@ def load_night(night_directory: str,
                 filename= spectra_directory + '/' + filename
                 )
             )
+    
+    for spectrum in spectra_list:
+        spectrum.meta['Night'] = night_directory.split('/')[-1]
+
     return spectra_list
 
 #%% SpectraFormat
@@ -711,7 +715,6 @@ def _load_meta_from_header(header: fits.header.Header) -> dict:
             'Average_S_N':sn[0],
             'Exptime':header['EXPTIME'] * u.s, #Exposure time,
             'instrument': header['INSTRUME'],
-            'Night': header['DATE-OBS'][:10],
             }
     
     return meta

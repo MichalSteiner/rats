@@ -16,18 +16,44 @@ logger = default_logger_format(logger)
 @save_and_load
 def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
                           linelist: str,
-                          number_of_exposures: int | sp.SpectrumList = 40,
+                          exposures: int | sp.SpectrumList = 40,
                           force_load: bool = False,
                           force_skip: bool = False,
-                          pkl_name: str = 'transmission_spectrum.pkl'
+                          pkl_name: str = 'RM_model.pkl'
                           ) -> StarRotator:
-    if type(number_of_exposures) == sp.SpectrumList:
-        phases = [spectrum.meta['Phase'].data for spectrum in number_of_exposures if spectrum.meta['Transit_partial']]
-        start_wlg, end_wlg = number_of_exposures[0].spectral_axis[0].to(u.nm).value, number_of_exposures[0].spectral_axis[-1].to(u.nm).value
+    """
+    StarRotator wrapper that uses pySME for master out spectra generation corrected for RM+CLV effect. This wrapper simplifies the input for the StarRotator, however, it limits the usable options.
+
+    Parameters
+    ----------
+    SystemParameters : SystemParametersComposite
+        System parameters under which the model needs to be calculated
+    linelist : str
+        Location of the file with line list, as obtained through the VALD database.
+    exposures : int | sp.SpectrumList, optional
+        Exposures for which to consider the model, by default 40. If integer, it refers to number of spectra to be modelled linearly spaced in phase. If SpectrumList, the entire list of spectra will be modeled, including out-of-transit data.
+    force_load : bool, optional
+        Whether to load the output, by default False. If true, the 'pkl_name' will be opened and loaded, and the function will be skipped.
+    force_skip : bool, optional
+        Whether to skip the function completely, by default False. If true, the function will not be run and no output will be provided.
+    pkl_name : str, optional
+        Name of the pickle file, by default 'RM_model.pkl'
+
+    Returns
+    -------
+    StarRotator
+        StarRotator object, which holds all information from the modelling. Refer to StarRotator documentation to see more details.
+    """
+    
+    
+    
+    if type(exposures) == sp.SpectrumList:
+        phases = [spectrum.meta['Phase'].data for spectrum in exposures]
+        start_wlg, end_wlg = exposures[0].spectral_axis[0].to(u.nm).value, exposures[0].spectral_axis[-1].to(u.nm).value
     else:
         t1 = -SystemParameters.Ephemeris.transit_length_partial.convert_unit_to(u.d).data / SystemParameters.Ephemeris.period.data / 2
         t4 = -t1
-        phases = np.linspace(t1, t4, number_of_exposures)
+        phases = np.linspace(t1, t4, exposures)
         start_wlg, end_wlg = 586.0,592.0
            
     input_dictionary = {
@@ -37,8 +63,8 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
         'T': SystemParameters.Star.temperature.data,
         'FeH': SystemParameters.Star.metallicity.data,
         'logg': SystemParameters.Star.logg.data,
-        'u1': 0.43180061,# FIXME
-        'u2': 0.27686728, # FIXME
+        'u1': SystemParameters.Star.LimbDarkening_u1,# FIXME
+        'u2': SystemParameters.Star.LimbDarkening_u2, # FIXME
         'R': 140000, # FIXME
         'mus': 10,
         'model': 'pySME',
@@ -57,19 +83,28 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
     input_dictionary = _correct_NaNs(input_dictionary)
     RM_model = StarRotator(start_wlg,end_wlg,200.0,input=input_dictionary)
     return RM_model
+
+
 def _correct_NaNs(input_dictionary: dict) -> dict:
-    
+    """
+    Correct NaN numbers for eccentricity and argument of periastron, replacing them with default value.
+
+    Parameters
+    ----------
+    input_dictionary : dict
+        _description_
+
+    Returns
+    -------
+    dict
+        _description_
+    """
     if np.isnan(input_dictionary['e']):
         input_dictionary['e'] = 0
     if np.isnan(input_dictionary['omega']):
-        input_dictionary['omega'] = 0
+        input_dictionary['omega'] = 90
     
     return input_dictionary
-
-def _get_LD_coefficients():
-    
-    
-    return
 
 if __name__ == '__main__':
     
@@ -97,6 +132,6 @@ if __name__ == '__main__':
     linelist = "/media/chamaeleontis/Observatory_main/Code/rats/LINELIST_VALD/MichalSteiner.015070"
     RM_model = run_StarRotator_pySME(SystemParameters= KELT10b,
                                      linelist= linelist,
-                                     number_of_exposures= 15)
+                                     exposures= 15)
     
     logger.info('Test succesful')

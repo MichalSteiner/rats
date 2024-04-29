@@ -19,7 +19,7 @@ from itertools import repeat
 from copy import deepcopy
 import astropy.constants as con
 import pickle
-import polars as pl
+# import polars as pl
 import warnings
 import math
 import specutils.fitting as fitting
@@ -1237,60 +1237,73 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
 #%% spec_list_master_correct
 @progress_tracker
 @save_and_load
-def spec_list_master_correct(spec_list,master,force_load=False, force_skip=False,pkl_name=''):
+def master_out_correction(spectrum_list: sp.SpectrumList,
+                          master_list: sp.SpectrumList,
+                          unit: u.Unit | None = None,
+                          force_load: bool = False,
+                          force_skip: bool = False,
+                          pkl_name: str = ''
+                          ) -> sp.SpectrumList:
     """
-    Corrects spec_list by master (spec/master)
-    Input:
-        spec_list ; sp.SpectrumList to correct
-        master ; sp.SpectrumList with masters divided by night
-    Output:
-        corrected_list ; sp.SpectrumList corrected by master
+    Correct spectrum list for master out.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to correct data for.
+    master_list : sp.SpectrumList
+        Master list to correct data with. Must be ordered such that 'Night_num' keyword is the night respective indice.
+    unit : u.Unit | None, optional
+        Unit to add to the corrected spectrum, by default None. If None, no unit is added. Normally the F_lam unit is correct, which corresponds to the differential unit gained by dividing normalized spectrum with its master out. Adding unit provides further functionality to the transmission spectrum, allowing different representation (such as atmospheric scale height).
+    force_load : bool, optional
+        Whether to force loading the output, by default False. If true, a pkl_name file is going to be looked for, and if found, the output is going to be loaded.
+    force_skip : bool, optional
+        Force skipping of the function, by default False. If true, the function is skipped completely. This means NO output is being given.
+    pkl_name : str, optional
+        Pickle name for the save data, by default ''. 
+
+    Returns
+    -------
+    corrected_list : sp.SpectrumList
+        Master out corrected spectrum list.
     """
     corrected_list = sp.SpectrumList()
-    for item in spec_list:
+    
+    for item in spectrum_list:
         num_night = item.meta['Night_num']
-        master_night = master[num_night]
-        divided_spectrum = item.divide(master_night)
+        master_night = master_list[num_night]
+        divided_spectrum = item.divide(master_night, handle_meta='first_found')
         
-        corrected_spectrum =sp.Spectrum1D(
-            spectral_axis = item.spectral_axis,
-            flux = divided_spectrum.flux,
-            uncertainty = divided_spectrum.uncertainty,
-            mask = item.mask.copy(),
-            meta = item.meta.copy(),
-            wcs = item.wcs,
-            )
-
-        corrected_list.append(corrected_spectrum)
+        corrected_list.append(divided_spectrum)
+    if unit is not None:
+        corrected_list = replace_flux_units_transmission(corrected_list, unit)
+    
     return corrected_list
+#%%
+def master_out_with_RM_correction(spectrum_list: sp.SpectrumList,
+                                  RM_model,
+                                  unit: u.Unit | None = None,
+                                  force_load: bool = False,
+                                  force_skip: bool = False,
+                                  pkl_name: str = '',
+                                  ) -> sp.SpectrumList:
+    ...
+    # corrected_list = sp.SpectrumList()
+    
+    # for item in spectrum_list:
+    #     master = sp.Spectrum1D(
+    #         spectral_axis = RM_model.wl* 10 *u.AA,
+    #         # flux = 
+            
+            
+    #     )
+        
+    #     divided_spectrum = item.divide(master, handle_meta='first_found')
+        
+    
+    
+    return
 
-# #%% rm_list_correct
-# def rm_list_correct(spec_list,master,star_para):
-#     """
-#     Corrects spec_list for RM effect
-#     Input:
-#         spec_list ; sp.SpectrumList to correct for RM
-#         master ; sp.SpectrumList containing master divided by night
-#         star_para ; Star_para class containing stellar parameters (P_R,S_R necessary)
-#     Output:
-#         rm_list_corrected ; sp.SpectrumList corrected by RM
-#     """
-
-#     sublist = get_sublist(spec_list,'RM_velocity',True)
-#     rm_list_corrected = sp.SpectrumList()
-#     entire_list = spec_list.copy()
-#     master_RF_star_oot = calculate_master_list(spec_list,key = 'Transit',value =False)
-#     entire_list = spec_list_master_correct(spec_list,master_RF_star_oot)
-#     for item in sublist:
-#         num_night = item.meta['Night_num']
-#         master_night = master[num_night]
-#         corrected_spectrum = rm_correction(item,master_night,star_para)
-#         rm_list_corrected.append(corrected_spectrum)
-#         for ind,ent_item in enumerate(entire_list):
-#             if ent_item.meta['spec_num'] == corrected_spectrum.meta['spec_num']:
-#                 entire_list[ind] = corrected_spectrum
-
-#     return rm_list_corrected,entire_list
 
 #%% exciser_fill_with_nan
 def exciser_fill_with_nan(spectrum,region):

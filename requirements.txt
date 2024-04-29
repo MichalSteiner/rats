@@ -16,3 +16,6 @@ colorlog
 petitRADTRANS
 pysme-astro
 screeninfo
+polars
+texttable
+latextable

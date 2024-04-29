@@ -566,6 +566,17 @@ class _PlanetParameters(parautils.CalculationPlanet):
         self.eccentricity.unit = u.dimensionless_unscaled
         self.argument_of_periastron = _load_array_from_CompositeTable(CompositeTableRow, 'pl_orblper', 'Planetary argument of periastron')
         self.argument_of_periastron.unit = u.deg
+        if self.eccentricity.data == 0:
+            self.argument_of_periastron = NDDataArray(
+                data= 90,
+                unit= u.deg,
+                uncertainty= StdDevUncertainty(0),
+                meta= {
+                    'reference': 'Assumed',
+                    'parameter': 'Planetary argument of periastron',
+                    'details': 'Assumed 90 degrees as eccentricity is 0'
+                    }
+            )
         self.a_rs_ratio = _load_array_from_CompositeTable(CompositeTableRow, 'pl_ratdor', 'Planet semimajor-axis to stellar radius ratio')
         self.a_rs_ratio.unit = u.dimensionless_unscaled
         self.keplerian_semiamplitude = _load_array_from_CompositeTable(CompositeTableRow, 'pl_rvamp', 'Keplerian semiamplitude')

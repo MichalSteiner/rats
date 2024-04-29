@@ -169,6 +169,9 @@ data_raw_A, telluric_profiles, data_uncorrected = molload.molecfit_output(
 # Overplot it with telluric profile to check for potential spurious feature
 # =============================================================================
 
+#%% Print observation log output
+tab.observation_log(data_raw_A)
+
 
 #%% Define phases, velocities and transit values
 system_parameters.spectra_transit_flags(data_raw_A)
@@ -288,7 +291,7 @@ master_SRF_int = sm.calculate_master_list(data_SRF,
                                           force_skip = force_skip,
                                           pkl_name = 'master_in_SRF.pkl'
                                           )
-data_out_corrected = sm.spec_list_master_correct(data_SRF,
+data_out_corrected = sm.master_out_correction(data_SRF,
                                                  master_SRF_out,
                                                  force_load = force_load,
                                                  force_skip = force_skip,
