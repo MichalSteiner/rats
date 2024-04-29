@@ -33,7 +33,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'sphinx.ext.napoleon',
-    'renku'
+    'renku-sphinx-theme'
 ]
 
 templates_path = ['_templates']
