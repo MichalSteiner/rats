@@ -43,7 +43,6 @@ parameters provided with scientific literature. Furthermore, if analyzing old da
 more precise due to closer mid transit value (the uncertainty scales with number of orbits passed since the mid
 transit).
 
-
 .. important::
 
     Please always cite all sources that have been used. For system parameter class, a method for generating LaTeX
@@ -53,6 +52,8 @@ table will be available soon [WIP].
     Currently, no class for all exoplanets system is available. A similar class will be developed for plotting
 diagrams of exoplanets population eventually, but this is currently low priority. Only the full
 
+
+.. automodapi:: rats.parameters
 
 Indices and tables
 ==================

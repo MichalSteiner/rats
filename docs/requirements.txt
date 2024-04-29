@@ -1,2 +1,3 @@
 renku-sphinx-theme
 sphinx_automodapi
+git+https://github.com/MichalSteiner/rats.git

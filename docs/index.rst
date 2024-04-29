@@ -15,8 +15,11 @@ Welcome to `RATS` (Revealing Atmospheres with Transmission Spectroscopy) package
 
     If you use this code, please cite Steiner et al. (2023). In future, more up-to-date reference will be available. Some modules also require additional external packages, please cite these as well. More specific instructions will be added in future.
 
-This pipeline serves two purposes.
+
+This pipeline serves two purposes:
+
 1. It is fully implemented transmission spectrocopy pipeline (soon Rossiter-McLaughlin will be implemented as well), which can be used "out-of-the-box", in particular with high-resolution spectrographs like HARPS and ESPRESSO.
+
 2. It is a library of commonly used functions, utilizing the **specutils** package, from which user can use selected methods without the need to significantly modify their codes.
 
 
