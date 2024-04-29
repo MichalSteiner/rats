@@ -37,9 +37,7 @@ Welcome to your documentation.
    :maxdepth: 2
    :caption: Modules
 
-   calculate_transit_windows
-   observatories
-   NASA_exo
+.. automodapi:: rats.spectra_manipulation
 
 Get Started
 ===========
