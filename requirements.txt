@@ -12,8 +12,6 @@ requests
 pandas
 dill
 colorlog
-petitRADTRANS
-pysme-astro
 screeninfo
 polars
 texttable
