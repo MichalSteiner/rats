@@ -19,3 +19,4 @@ screeninfo
 polars
 texttable
 latextable
+renku-sphinx-theme
