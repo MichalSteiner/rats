@@ -56,5 +56,5 @@ numpydoc_show_class_members = False
 nbsphinx_allow_errors = True
 
 # html_theme = 'groundwork'
-html_theme = 'renku'
+# html_theme = 'renku'
 html_static_path = ['_static']
