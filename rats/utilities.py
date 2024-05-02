@@ -222,6 +222,8 @@ def save_and_load(func):
             try:
                 with open(file, 'rb') as input_file:
                     output =  pickle.load(input_file)
+                    logger.info(f'File {file} loaded succesfully as output of function:')
+                    logger.info(f'    {func.__name__}')
                 return output
             except:
                 logger.info('Error opening input file: %s'%file)

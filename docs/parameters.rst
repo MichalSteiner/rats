@@ -37,21 +37,21 @@ week the TAP service is being updated. Meaning, if you run this line multiple ti
 
 
 .. important::
-
     The NASA Exoplanet Composite Table does not necessarily provide most precise parameters. Always verify the
 parameters provided with scientific literature. Furthermore, if analyzing old data, a less recent ephemeris might be
 more precise due to closer mid transit value (the uncertainty scales with number of orbits passed since the mid
 transit).
 
 .. important::
-
     Please always cite all sources that have been used. For system parameter class, a method for generating LaTeX
 table will be available soon [WIP].
 
 .. important::
     Currently, no class for all exoplanets system is available. A similar class will be developed for plotting
-diagrams of exoplanets population eventually, but this is currently low priority. Only the full
+diagrams of exoplanets population eventually, but this is currently low priority.
 
+.. important::
+    As `RATS` has not been extensivelly debugged on large number of systems, there are few potential bugs. In particular, multiple star systems might break, only showing the primary star. Please verify your system parameters when working with such systems.
 
 
 Indices and tables

@@ -17,6 +17,7 @@ logger = default_logger_format(logger)
 def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
                           linelist: str,
                           exposures: int | sp.SpectrumList = 40,
+                          abundances: dict = {},
                           force_load: bool = False,
                           force_skip: bool = False,
                           pkl_name: str = 'RM_model.pkl'
@@ -44,9 +45,7 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
     StarRotator
         StarRotator object, which holds all information from the modelling. Refer to StarRotator documentation to see more details.
     """
-    
-    
-    
+
     if type(exposures) == sp.SpectrumList:
         phases = [spectrum.meta['Phase'].data for spectrum in exposures]
         start_wlg, end_wlg = exposures[0].spectral_axis[0].to(u.nm).value, exposures[0].spectral_axis[-1].to(u.nm).value
@@ -63,8 +62,8 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
         'T': SystemParameters.Star.temperature.data,
         'FeH': SystemParameters.Star.metallicity.data,
         'logg': SystemParameters.Star.logg.data,
-        'u1': SystemParameters.Star.LimbDarkening_u1,# FIXME
-        'u2': SystemParameters.Star.LimbDarkening_u2, # FIXME
+        'u1': SystemParameters.Star.LimbDarkening_u1,
+        'u2': SystemParameters.Star.LimbDarkening_u2,
         'R': 140000, # FIXME
         'mus': 10,
         'model': 'pySME',
@@ -77,7 +76,7 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
         'P': SystemParameters.Ephemeris.period.data,
         'phases': phases,
         'grid_model': '',
-        'abund': {},
+        'abund': abundances,
         'linelist_path': linelist
         }
     input_dictionary = _correct_NaNs(input_dictionary)

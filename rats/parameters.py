@@ -411,8 +411,8 @@ class _StellarParameters(parautils.StellarModel,
             NASA Exoplanet Composite Table as loaded through the TAP service.
         """
         self.name = CompositeTableRow['hostname']
-        self.stellar_type = _load_array_from_CompositeTable(CompositeTableRow, 'st_spectype', 'Spectral Type')
-        self.temperature = _load_array_from_CompositeTable(CompositeTableRow, 'st_teff', 'Stellar Temperature')
+        self.stellar_type = _load_array_from_CompositeTable(CompositeTableRow, 'st_spectype', 'Spectral type')
+        self.temperature = _load_array_from_CompositeTable(CompositeTableRow, 'st_teff', 'Stellar temperature')
         self.temperature.unit = u.K
         self.radius = _load_array_from_CompositeTable(CompositeTableRow, 'st_rad', 'Stellar radius')
         self.radius.unit = u.R_sun

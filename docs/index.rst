@@ -33,9 +33,6 @@ Welcome to your documentation.
    :maxdepth: 2
    :caption: Welcome
 
-   start
-
-
 .. toctree::
    :maxdepth: 2
    :caption: Modules

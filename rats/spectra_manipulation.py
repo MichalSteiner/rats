@@ -13,6 +13,7 @@ import rats.parameters as para
 import rats.spectra_manipulation_subroutines.calculation as smcalc
 import astropy.units as u
 from functools import singledispatch 
+from rats.StarRotator.StarRotator import StarRotator
 import astropy.io.fits as fits
 from pathos.multiprocessing import Pool
 from itertools import repeat
@@ -653,12 +654,15 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
         logger.info('Finished correctly')
     
     return new_spectrum
+
 #%% interpolate2commonframe
 @singledispatch
 def interpolate2commonframe(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                             new_spectral_axis: sp.spectra.spectral_axis.SpectralAxis) -> sp.Spectrum1D | sp.SpectrumCollection:
     """
     Interpolate spectrum to new spectral axis.
+    
+    If spectra have different length of spectral axis, apart of classical error propagation through np.sqrt(err_int(lambda)**2), a scaling factor of len(new_x_axis)/ (old_x_axis) is used. This ensures, that if we oversample the spectra, we scale the uncertainty respectivelly. 
 
     Parameters
     ----------
@@ -681,6 +685,7 @@ def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D,
                                ) -> sp.Spectrum1D:
     """
     Interpolate spectrum to new spectral axis.
+    
 
     Parameters
     ----------
@@ -699,6 +704,9 @@ def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D,
         if (spectrum.spectral_axis == new_spectral_axis).all(): 
             logger.debug('Skipping interpolation as the desired spectral axis is the same as of the spectrum.')
             return spectrum
+    
+    # Factor to scale uncertainty with difference in number of pixels
+    scaling_uncertainty =  len(new_spectral_axis) / len(spectrum.spectral_axis)
     
     # Combine the mask arrays of flux and errors
     mask_flux = ~np.isfinite(spectrum.flux)
@@ -728,7 +736,7 @@ def _interpolate2commonframe_1D(spectrum: sp.Spectrum1D,
     # Masking values that were NaN
     new_flux[mask] = np.nan
     new_uncertainty[mask] = np.nan
-    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty)
+    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty * scaling_uncertainty)
     
     new_spectrum = sp.Spectrum1D(
         spectral_axis = new_spectral_axis,
@@ -1280,29 +1288,54 @@ def master_out_correction(spectrum_list: sp.SpectrumList,
     
     return corrected_list
 #%%
-def master_out_with_RM_correction(spectrum_list: sp.SpectrumList,
-                                  RM_model,
-                                  unit: u.Unit | None = None,
-                                  force_load: bool = False,
-                                  force_skip: bool = False,
-                                  pkl_name: str = '',
-                                  ) -> sp.SpectrumList:
-    ...
-    # corrected_list = sp.SpectrumList()
+@progress_tracker
+@time_function
+def master_out_correction_StarRotator(spectrum_list: sp.SpectrumList,
+                                   RM_model: StarRotator,
+                                   master_out: sp.SpectrumList,
+                                   ) -> sp.SpectrumList:
+    """
+    Correct for master out including residuals as calculated by StarRotator
     
-    # for item in spectrum_list:
-    #     master = sp.Spectrum1D(
-    #         spectral_axis = RM_model.wl* 10 *u.AA,
-    #         # flux = 
-            
-            
-    #     )
+    This function corrects for RM+CLV effect.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to correct master out for
+    RM_model : StarRotator
+        RM_model as given out by StarRotator
+    master_out : sp.SpectrumList
+        Master out list to use as base out-of-transit spectrum
+
+    Returns
+    -------
+    corrected_list : sp.SpectrumList
+        Corrected spectrum list
+    """
+
+    assert len(RM_model.spectra) == len(spectrum_list), 'RM model from StarRotator does not have same length as spectra'
+    assert (RM_model.times == np.asarray([item.meta['Phase'].data for item in spectrum_list])).all(), 'The phase array of RM model and spectrum list is not the same'
+
+    corrected_list = sp.SpectrumList()
+
+    for spectrum, RM_master, delta in zip(spectrum_list, RM_model.residual, RM_model.lightcurve):
+        master_night = master_out[spectrum.meta['Night_num']]
         
-    #     divided_spectrum = item.divide(master, handle_meta='first_found')
+        RM_residuals = sp.Spectrum1D(
+            spectral_axis = RM_model.wl* 10 *u.AA,
+            flux = RM_master/delta * u.dimensionless_unscaled,
+            uncertainty = astropy.nddata.StdDevUncertainty(np.zeros_like(RM_master))
+            )
         
-    
-    
-    return
+        RM_residuals = interpolate2commonframe(RM_residuals,
+                                                  spectrum.spectral_axis)
+        master_night.divide(RM_residuals)
+        
+        divided_spectrum = spectrum.divide(master_night, handle_meta='first_found')
+        
+        corrected_list.append(divided_spectrum)
+    return corrected_list
 
 
 #%% exciser_fill_with_nan

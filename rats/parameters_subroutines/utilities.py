@@ -5,7 +5,7 @@ import astropy
 import specutils as sp
 from astropy.nddata import NDData, StdDevUncertainty, NDDataArray
 import logging
-from rats.utilities import default_logger_format, time_function
+from rats.utilities import default_logger_format, time_function, save_and_load
 import rats.ndarray_utilities as ndutils
 import numpy as np
 from functools import lru_cache
@@ -805,7 +805,7 @@ class StellarModel():
         return stellar_spectrum
     
 class LimbDarkening:
-
+    
     def calculate_limb_darkening_coefficients(self):
         """
         Response functions can be downloaded here: http://svo2.cab.inta-csic.es/theory/fps/index.php?id=SLOAN/SDSS.u&&mode=browse&gname=SLOAN&gname2=SDSS#filter
@@ -818,6 +818,8 @@ class LimbDarkening:
         from uncertainties import ufloat
         #DOCUMENTME
         # FIXME: This is dumb!
+        from ..setup_filenames import LDCU_location
+        sys.path.append(LDCU_location)
         sys.path.append('/media/chamaeleontis/Observatory_main/Code/LDCU-main')
         
         import get_lds_with_errors_v3 as glds
@@ -852,7 +854,12 @@ class LimbDarkening:
         return ldc['espresso_uniform.dat']['quadratic']['Merged']['ALL'][0][0], ldc['espresso_uniform.dat']['quadratic']['Merged']['ALL'][1][0]
 
 class ModellingLightCurve:
-    def model_light_curve(self):
+    
+    @save_and_load
+    def model_light_curve(self,
+                          force_load=False,
+                          force_skip=False,
+                          pkl_name='light_curve_model.pkl'):
         """
         Creates a model light-curve with quadratic limb-darkening.
         
