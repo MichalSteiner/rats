@@ -10,7 +10,7 @@ are saved in a class system, several of which exists. The typical one is the `Sy
 contains the information of planet, star and system.
 
 Each variable is kept as a `astropy.nddata.NDDataArray` object. This includes the `parameter` value, `uncertainty`
-attributes, while reference and parameter name are kept in the `meta` dictionary attribute.
+attributes, while reference and parameter name are kept in the `meta` dictionary attribute. This makes adding custom values little bit annoying, as one has to specify all of these, but has multiple advantages for the code.
 
 The class is divided between the parameters of Planet (accessible by `.Planet.parameter` notation), Star (accessible
 by `.Star.parameter` notation), System (accessible by `.System.parameter` notation) and Ephemeris (accessible by `

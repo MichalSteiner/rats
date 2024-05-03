@@ -87,14 +87,17 @@ def molecfit_correction(data_corrected: sp.SpectrumList,
 def normalization(pre_normalization: sp.SpectrumList,
                   post_normalization: sp.SpectrumList) -> [plt.Figure, plt.Axes]:
     # TODO - switch between spectra
-    
-    return
+    ...
 
 def cosmic_correction() -> [plt.Figure, plt.Axes]:
-    return
+    ...
 
 def shifting_function() -> [plt.Figure, plt.Axes]:
-    return
+    ...
 
 def master_calculation(spectrum_list: sp.SpectrumList) -> [plt.Figure, plt.Axes]:
-    return
+    ...
+
+def RM_correction():
+    ...
+    

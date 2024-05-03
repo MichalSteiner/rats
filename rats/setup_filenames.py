@@ -14,4 +14,4 @@ Filepaths:
 LDCU_location = '/media/chamaeleontis/Observatory_main/Code/LDCU-main'
 StarRotator_location = None
 petitRADTRANS_location = None
-esorex_location = None
+command_esorex =  "/home/chamaeleontis/esoreflex/esoreflex/bin/esorex"

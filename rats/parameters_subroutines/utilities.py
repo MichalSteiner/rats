@@ -812,7 +812,7 @@ class LimbDarkening:
         
         Better way is to create a proxy-filter for given wavelength range of an instrument.
         
-        _summary_
+        TODO: Create a proxy-filter based on instrument data
         """
         import sys
         from uncertainties import ufloat
@@ -820,7 +820,7 @@ class LimbDarkening:
         # FIXME: This is dumb!
         from ..setup_filenames import LDCU_location
         sys.path.append(LDCU_location)
-        sys.path.append('/media/chamaeleontis/Observatory_main/Code/LDCU-main')
+        # sys.path.append('/media/chamaeleontis/Observatory_main/Code/LDCU-main')
         
         import get_lds_with_errors_v3 as glds
 
@@ -887,14 +887,11 @@ class ModellingLightCurve:
         params.w = argument_of_periastron                       #longitude of periastron (in degrees)
         params.u = [u1, u2]                #limb darkening coefficients [u1, u2]
         params.limb_dark = "quadratic"       #limb darkening model
-        
+
         self.Star.LimbDarkening_u1 = u1
         self.Star.LimbDarkening_u2 = u2
         
         self.lc_params = params
-        
-        
-        
         return
     
     def add_transit_depth_value(self,

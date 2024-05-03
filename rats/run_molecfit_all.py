@@ -61,7 +61,9 @@ logger = default_logger_format(logger)
 
 #%%
 # Location of esorex command, alias won't work!
-command_esorex = "/home/chamaeleontis/esoreflex/esoreflex/bin/esorex"
+# command_esorex = "/home/chamaeleontis/esoreflex/esoreflex/bin/esorex"
+from rats.setup_filenames import command_esorex
+
 force_sgl = False
 force_all = False
 wlg2mic = 0.0001 # Conversion factor from our units to microns
@@ -75,45 +77,6 @@ if __name__ == '__main__':
     # =============================================================================
     # Main directory
     # directory_root = '/media/chamaeleontis/Observatory_main/WASP-76/data/spectra/ESPRESSO/2018-09-02/Fiber_A/S1D/molecfit'
-    # =============================================================================
-    # HEARTS
-    # =============================================================================
-
-    # =============================================================================
-    # KELT-11b
-    # =============================================================================
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-01/Fiber_A/S1D/molecfit'
-
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-14/Fiber_A/S1D/molecfit'
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-15/Fiber_A/S1D/molecfit'
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-02-16/Fiber_A/S1D/molecfit'
-
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-05/Fiber_A/S1D/molecfit'
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-06/Fiber_A/S1D/molecfit'
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/KELT-11b/data/spectra/HARPS/2017-03-07/Fiber_A/S1D/molecfit'
-
-
-    # =============================================================================
-    # WASP-121b
-    # =============================================================================
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2017-12-31/Fiber_A/S1D/molecfit'
-    directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2018-01-09/Fiber_A/S1D/molecfit'
-    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-121b/data/spectra/HARPS/2018-01-14/Fiber_A/S1D/molecfit'
-
-    # =============================================================================
-    # WASP-166b
-    # =============================================================================
-    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-01-13/Fiber_A/S1D/molecfit'
-    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-03-03/Fiber_A/S1D/molecfit'
-    # directory_root = '/media/chamaeleontis/Observatory_main/Analysis_dataset/APL_HEARTS_Loukas/WASP-166b/data/spectra/HARPS/2017-03-14/Fiber_A/S1D/molecfit'
-
-
-    # =============================================================================
-    # Valentina SKYSUB data
-    # =============================================================================
-    # directory_root = '/media/chamaeleontis/Observatory_main/Valentina_molecfit/WASP-189b/2023-04-24/molecfit_HARPS_SKYSUB/molecfit'
-    # directory_root = '/media/chamaeleontis/Observatory_main/Valentina_molecfit/WASP-189b/2023-06-04/molecfit_HARPS_SKYSUB/molecfit'
-    # WLG_TO_MICRON parameterL
     # =============================================================================
     # Additional directories
     directory_molecfit_input = directory_root +'/molecfit_input'

@@ -221,6 +221,8 @@ def save_and_load(func):
         elif kwargs['force_load'] == True:
             try:
                 with open(file, 'rb') as input_file:
+                    logger.info(f'Trying to open file: {file} as output of function:')
+                    logger.info(f'    {func.__name__}')
                     output =  pickle.load(input_file)
                     logger.info(f'File {file} loaded succesfully as output of function:')
                     logger.info(f'    {func.__name__}')

@@ -10,7 +10,7 @@ from enum import Enum
 import screeninfo
 
 
-
+import numpy as np
 
 #%% 
 class PlotModes(Enum):
@@ -239,3 +239,21 @@ def _get_colormap(low_color: str,
         as_cmap=True
         )
     return cmap
+
+
+def _marker_instrument(Instruments: list) -> list:
+    """Generate a list of markers to put in the plot for each instrument uniquely"""
+    marker_list = ['o', "v", "p", 'P', "*", 'thin_diamond'] 
+    unique_inst = np.unique(Instruments)
+    if len(unique_inst) > len(marker_list):
+        raise ValueError("Please add more markers in the list, as the number of instruments is too large. Regardless, the plot will likely be too crowded and needs to be split anyway.")
+    markers_instrument = []
+    for test_instrument in Instruments:
+        for ind, unique in enumerate(unique_inst):
+            if test_instrument == unique:
+                markers_instrument.append(marker_list[ind])
+    return markers_instrument
+
+def _color_night(Night_number: int) -> tuple:
+    """Defines a color for each night uniquely"""
+    return sns.color_palette('bright')[Night_number - 1]

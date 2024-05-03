@@ -23,26 +23,14 @@ This pipeline serves two purposes:
 2. It is a library of commonly used functions, utilizing the **specutils** package, from which user can use selected methods without the need to significantly modify their codes.
 
 
-
-Welcome
-=======
-
-Welcome to your documentation.
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Welcome
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Modules
-
-.. automodapi:: rats
-
 Get Started
 ===========
 
-There are currently two template pipelines for `Transmission spectroscopy` and `Rossiter-McLaughlin` analysis. Its usage is provided in :ref:`Get Started` notebooks. 
+There are currently two template pipelines for `Transmission spectroscopy` and `Rossiter-McLaughlin` analysis. Its usage is provided in <WIP: Add template notebooks> :ref:`Get Started` notebooks. A script to initiate project might be provided eventually, but in short:
+1. Create a `main_directory` (can be whatever empty folder). This is where all your analysis will be done in.
+2. Create a `code` directory (the directory name can be different, but there are some reserved words).
+3. Run `rats.single_use.setup_routine` function (check documentation for information on how to use). This function will create a tree directory and move the downloaded spectra into their respective directories.
+
 
 
 

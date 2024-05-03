@@ -8,11 +8,14 @@ from enum import Enum
 import dill as pickle
 import screeninfo
 
+import numpy as np
+import rats
+
 import logging
 from rats.utilities import default_logger_format
 from rats.spectra_manipulation import binning_spectrum
 
-import rats.plots.utilities as ut
+import rats.plot.utilities as ut
 import matplotlib as mpl
 #%% Setting up logging
 logger = logging.getLogger(__name__)
@@ -342,3 +345,91 @@ class PlotColormap(PlotsUtils):
         
         
         return
+    
+
+
+def observation_log(spectrum_list: sp.SpectrumList,
+                    system_parameters: rats.parameters.SystemParametersComposite,
+                    ) -> [plt.Figure, plt.Axes]:
+    """
+    Observation log for the entire dataset.
+    
+    Creates a subplot with three rows, each of them containing Airmass, Seeing and SNR variation across the phase. Transit contact points are marked by lines, and out-of transit phases are filled in red, partial transit in yellow and full transit in green.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to use for dataset creation. The data can be whatever format, however they need to have the respective keys in meta dictionary.
+    system_parameters : rats.parameters.SystemParametersComposite
+        _description_
+
+    Returns
+    -------
+    [plt.Figure, plt.Axes]
+        _description_
+    """
+    fig, axs = plt.subplots(3, figsize=(24,32))
+
+    # Gain observation log information
+    Phase = [spectrum.meta['Phase'].data for spectrum in spectrum_list]
+    Night_num = [spectrum.meta['Night_num'] for spectrum in spectrum_list]
+    Nights = [spectrum.meta['Night'] for spectrum in spectrum_list]
+    Airmass = [spectrum.meta['Airmass'] for spectrum in spectrum_list]
+    Seeing = [spectrum.meta['Seeing'] for spectrum in spectrum_list]
+    Average_SN = [spectrum.meta['Average_S_N'] for spectrum in spectrum_list]
+    Instruments = [spectrum.meta['instrument'] for spectrum in spectrum_list]
+
+    # Create color and marker list for the data
+    color_spectrum = [ut._color_night(spectrum.meta['Night_num']) for spectrum in spectrum_list]
+    markers_spectrum = ut._marker_instrument(Instruments)
+    
+    # Scatter plot of each individual exposure
+    for x_phase, y_airmass, y_seeing, y_snr, custom_marker, custom_color in zip(Phase, Airmass, Seeing, Average_SN, markers_spectrum, color_spectrum):
+        axs[0].scatter(x_phase, y_airmass, marker= custom_marker, color=custom_color, label='_nolegend_')
+        axs[0].set_ylim(2.2, .9)
+        axs[1].scatter(x_phase, y_seeing, marker= custom_marker, color=custom_color, label='_nolegend_')
+        axs[2].scatter(x_phase, y_snr, marker= custom_marker,  color=custom_color, label='_nolegend_')
+
+    # Fake (empty) plot for legend.
+    night_list, indices = np.unique(np.asarray(Night_num), return_index=True)
+    specific_night = np.asarray(Nights)[indices]
+    instrument = np.asarray(Instruments)[indices]
+    marker_unique = np.asarray(markers_spectrum)[indices]
+    
+    for ind, (night, spec) in enumerate(zip(night_list, specific_night)):
+        axs[0].scatter([], [], marker = marker_unique[ind], color= ut._color_night(night), label=f'Night {spec}, Instrument: {instrument[ind]}')
+        axs[1].scatter([], [], marker = marker_unique[ind], color= ut._color_night(night), label=f'Night {spec}, Instrument: {instrument[ind]}')
+        axs[2].scatter([], [], marker = marker_unique[ind], color= ut._color_night(night), label=f'Night {spec}, Instrument: {instrument[ind]}')
+
+    # Legends and labels 
+    axs[0].legend(bbox_to_anchor=(0.00, 1.30), loc='upper left')
+    axs[0].set_ylabel('Airmass')
+    axs[1].set_ylabel('Seeing')
+    axs[2].set_ylabel('Average S/N')
+    axs[2].set_xlabel('Phase')
+    x_lowest, x_highest = axs[0].get_xlim()
+
+    # Contact points and transit value color fill
+    for ax in axs:
+        red = sns.color_palette('pastel')[3]
+        yellow = sns.color_palette('pastel')[8]
+        green = sns.color_palette('pastel')[2]
+
+        ax.axvspan(x_lowest, system_parameters.Ephemeris.contact_T1.data, color=red, alpha=0.4, zorder=0.5)
+        ax.axvspan(system_parameters.Ephemeris.contact_T1.data,system_parameters.Ephemeris.contact_T2.data, color=yellow, alpha=0.4, zorder=0.5)
+        ax.axvspan(system_parameters.Ephemeris.contact_T2.data,system_parameters.Ephemeris.contact_T3.data, color=green, alpha=0.4, zorder=0.5)
+        ax.axvspan(system_parameters.Ephemeris.contact_T3.data,system_parameters.Ephemeris.contact_T4.data, color=yellow, alpha=0.4, zorder=0.5)
+        ax.axvspan(system_parameters.Ephemeris.contact_T4.data,x_highest, color=red, alpha=0.4, zorder=0.5)
+        
+        for contact in [system_parameters.Ephemeris.contact_T1.data,
+                        system_parameters.Ephemeris.contact_T2.data,
+                        system_parameters.Ephemeris.contact_T3.data,
+                        system_parameters.Ephemeris.contact_T4.data]:
+            ax.axvline(contact, ls='--', color='black',label='_nolegend_')
+        fig.subplots_adjust(top=0.9)
+    
+    # Saving figure
+    name_planet = system_parameters.Planet.name.replace(' ','').replace('-', '_')
+    fig.savefig(f'figures/Observation_plot_{name_planet}.pdf')
+
+    return fig, axs
