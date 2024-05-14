@@ -225,15 +225,12 @@ def _cosmic_correction_night(sublist):
 
     """
     new_spec_list = sp.SpectrumList()
-    
-    flux_all = np.zeros((len(sublist),len(sublist[0].spectral_axis)))
-    for ind,item in enumerate(sublist):
-        flux_all[ind,:] = item.flux
-    median = np.median(flux_all,axis=0)
+    flux_all = NDDataArray([item.flux for item in sublist], unit= sublist[0].flux.unit)
+    median = np.nanmedian(flux_all, axis=0)
     
     for ii, item in enumerate(sublist):
-        ind = np.where((item.flux - median) > item.uncertainty.array * 5)
-        flux = item.flux
+        ind = np.where((item.flux.value - median) > item.uncertainty.array * 5)
+        flux = item.flux.value
         flux[ind] = median[ind]
         
         new_spec_list.append(
@@ -243,7 +240,6 @@ def _cosmic_correction_night(sublist):
                 uncertainty = item.uncertainty, # Seems like a weird step
                 mask =  item.mask.copy(),
                 meta = item.meta.copy(),
-                wcs = item.wcs,
                 )
             )
     return new_spec_list

@@ -15,3 +15,6 @@ LDCU_location = '/media/chamaeleontis/Observatory_main/Code/LDCU-main'
 StarRotator_location = None
 petitRADTRANS_location = None
 command_esorex =  "/home/chamaeleontis/esoreflex/esoreflex/bin/esorex"
+RASSINE_location = '/media/chamaeleontis/Observatory_main/Code/Rassine_public-master'
+RASSINE_config = '/media/chamaeleontis/Observatory_main/Code/Rassine_public-master/Rassine_config.py'
+RASSINE_command = '/media/chamaeleontis/Observatory_main/Code/Rassine_public-master/Rassine.py'

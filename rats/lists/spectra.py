@@ -29,7 +29,7 @@ class _ProminentLines:
     
     
     def create_figure(self,
-                      n_rows:int = 1,
+                      n_rows: int = 1,
                       ) -> tuple[Figure, list[Axes]]:
         '''
         Initialize a figure for given line
@@ -47,7 +47,7 @@ class _ProminentLines:
         
 
         '''
-        fig, axs = plt.subplots(n_rows,len(self.wavelength_range))
+        fig, axs = plt.subplots(n_rows, len(self.wavelength_range))
         
         return fig,axs
         
@@ -70,7 +70,16 @@ class _ProminentLines:
         for subregion, ax in zip(self.wavelength_range,axs):
             ax.set_xlim(subregion.lower, subregion.upper)
         return None
-
+    
+    
+    def velocity_fold(self,
+                      spectrum_list: sp.SpectrumList):
+        ...
+    
+    def extract_region(self,
+                       spectrum_list):
+        ...
+    
 
 
 #%% Prominent lines list
@@ -96,6 +105,24 @@ Calcium_lines = _ProminentLines(
     'Calcium',
     [3933.66, 3968.47],
     sp.SpectralRegion(3930*u.AA, 3937*u.AA) + sp.SpectralRegion(3965*u.AA,3972*u.AA)
+    )
+
+Manganium_lines = _ProminentLines(
+    'Manganium',
+    [4030.76, 4033.07, 4034.49],
+    sp.SpectralRegion(4026*u.AA, 4040*u.AA)
+    )
+
+Magnesium_lines = _ProminentLines(
+    'Magnesium',
+    [4571.10, 5167.32, 5172.68, 5183.60],
+    sp.SpectralRegion(4568*u.AA, 4573*u.AA) + sp.SpectralRegion(5160*u.AA, 5190*u.AA)
+    )
+
+Lithium_lines = _ProminentLines(
+    'Lithium',
+    [6707.76],
+    sp.SpectralRegion(6700*u.AA, 6714*u.AA)
     )
 
 

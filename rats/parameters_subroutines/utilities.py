@@ -198,7 +198,7 @@ class CalculationSystem:
         )
         
         return stellar_velocity
-    
+    @time_function
     def calculate_local_stellar_velocity(self,
                                           spectrum_list: sp.SpectrumList):
         """
@@ -369,7 +369,7 @@ class CalculationSystem:
         spectrum.meta['velocity_star'] = velocity_star
         
         return
-    
+    @time_function
     def calculate_velocities_list(self,
                                   spectra_list: sp.SpectrumList) -> None:
         """
@@ -383,7 +383,7 @@ class CalculationSystem:
         
         for spectrum in spectra_list:
             self._calculate_velocities_spectrum(spectrum= spectrum)
-    
+    @time_function
     def add_velocity_system_in_list(self,
                                     spectra_list: sp.SpectrumList) -> None:
         """
@@ -669,6 +669,7 @@ class CalculationTransitLength:
         })
         return
     
+    @time_function
     def spectra_transit_flags(self,
                               spectra_list: sp.SpectrumList) -> None:
         """
@@ -705,8 +706,8 @@ class EquivalenciesTransmission:
         self.unit_NumberOfAtmosphericScaleHeights =  u.def_unit(['','Number of scale heights'])
         
         equivalency_transmission = u.Equivalency(
-            [
-                # Planetary radius (white-light radius assumed)
+            [i
+                # Planetary radius (white-light radius assumed)i
                 (self.unit_Transmission, self.unit_PlanetRadius,
                     lambda x: rat* (1-x+x/rat**2)**(1/2),
                     lambda x: (x**2 - rat**2)/(1-rat**2)

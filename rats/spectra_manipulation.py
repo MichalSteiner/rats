@@ -611,7 +611,6 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                                            spectrum.flux[~mask],
                                            extrapolate= False)
     # Interpolation function for uncertainty - cubic spline with no extrapolation
-    
     # Calculated with square of uncertainty, than final uncertainty is np.sqrt()
     interpolate_error = sci.interpolate.CubicSpline(new_x_axis[~mask],
                                            spectrum.uncertainty.array[~mask]**2,
@@ -624,10 +623,17 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         new_uncertainty = np.sqrt(interpolate_error(spectrum.spectral_axis)) # Interpolate on the old wave_grid
-        
-    # Masking values that were NaN
-    new_flux[mask] = np.nan
-    new_uncertainty[mask] = np.nan
+    
+
+    # Masking values that were NaN - not optimal # TODO
+    for masked_pixel in new_x_axis[mask]:
+        index = (np.abs(spectrum.spectral_axis.value - masked_pixel.value)).argmin()
+        new_flux[index] = np.nan
+        new_uncertainty[index] = np.nan
+
+    new_mask_flux = np.isnan(new_flux)
+    new_mask_err = np.isnan(new_uncertainty)
+    new_mask = np.logical_or(new_mask_flux, new_mask_err)
     
     new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty) # Interpolate on the old wave_grid
     
@@ -638,8 +644,7 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
             flux = new_flux * spectrum.flux.unit,
             uncertainty = new_uncertainty,
             meta = spectrum.meta.copy(),
-            mask = mask,
-            wcs = spectrum.wcs,
+            mask = new_mask,
             )
     elif type(spectrum) == sp.SpectrumCollection:
         logger.warning('Spectral Collection format has been untested, please verify')
@@ -648,8 +653,7 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
             flux = new_flux * spectrum.flux.unit,
             uncertainty = new_uncertainty,
             meta = spectrum.meta.copy(),
-            mask = mask,
-            wcs = spectrum.wcs,
+            mask = new_mask,
             )
         logger.info('Finished correctly')
     
@@ -1480,6 +1484,7 @@ def shift_spectrum_multiprocessing(spectrum,
 
 
 #%% shift_list
+@time_function
 @progress_tracker
 @save_and_load
 def shift_list(spectrum_list:sp.SpectrumList,
