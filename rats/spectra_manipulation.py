@@ -6,8 +6,10 @@ Created on Mon Sep  6 13:34:34 2021
 """
 
 #%% Importing libraries
+import astropy.nddata
 import specutils as sp
 import astropy
+from itertools import pairwise
 import numpy as np
 import rats.parameters as para
 import rats.spectra_manipulation_subroutines.calculation as smcalc
@@ -292,7 +294,6 @@ def custom_transmission_units(system_parameters: para.SystemParametersComposite
     
     return equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num
 
-
 #%% extract_subregion
 def _extract_subregion(spectrum: sp.Spectrum1D,
                        subregion: sp.SpectralRegion) -> np.ndarray:
@@ -477,6 +478,7 @@ def tie_wlg(model):
     return model.mean_0 + (5895.924-5889.950)
 
 #%% get_sublist
+@time_function
 def get_sublist(spectrum_list: sp.SpectrumList,
                 key: str,
                 value: Any,
@@ -907,7 +909,6 @@ def binning_list(spectrum_list: sp.SpectrumList,
                 interpolate2commonframe(spectrum,
                                         new_spectral_axis= new_spectral_axis)
             )
-            logger.debug(f'Interpolated spectrum number {spectrum.meta["Spec_num"]} on common frame')
             
     return new_spectrum_list
 
@@ -1613,27 +1614,80 @@ def extract_average_uncertainty_from_region(spec,line_list,diff_unc=1*u.AA):
         unc_list.append(np.nanmean(extract_region_in_spectrum(spec,spec_region).uncertainty.array))
     return unc_list
 #%% velocity_domain_sgl
-def velocity_domain_sgl(spectrum,line,constraint=[-100,100]*u.km/u.s):
+def velocity_domain_sgl(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                        line: u.Quantity,
+                        constraint: list = [-100,100]*u.km/u.s) -> sp.Spectrum1D | sp.SpectrumCollection:
     """
-    Returns a spectrum in velocity domain around the line
-    
-    Input:
-        spectrum ; sp.Spectrum1D - spectrum to represent in velocities
-        line ; value *u.AA - line around which to calculate the velocities
-    Output:
-        velocity_spectrum ; sp.Spectrum1D - spectrum represented in velocity
+    Converts a spectrum to velocity domain with a rest value of line using relativistic conversion.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to convert the spectral axis to.
+    line : u.Quantity
+        Line to use as rest value.
+    constraint : list, optional
+        Constraints to which cut the resulting velocity spectrum, by default [-100,100]*u.km/u.s.
+
+    Returns
+    -------
+    sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum in velocity range
     """
-    velocity = (spectrum.spectral_axis - line)/ line * con.c # Transform to velocity range
-    new_spectrum = sp.Spectrum1D( # Create new spectrum shifted
-        spectral_axis = velocity,
-        flux = spectrum.flux,
-        uncertainty = astropy.nddata.StdDevUncertainty(spectrum.uncertainty.array),
-        meta = spectrum.meta.copy(),
-        mask = spectrum.mask.copy(),
+    velocity_spectrum = spectrum.with_spectral_axis_unit(
+        u.km/u.s,
+        velocity_convention= 'relativistic',
+        rest_value = line
         )
-    spec_region = sp.SpectralRegion(constraint[0].to(u.m/u.s),constraint[1].to(u.m/u.s)) # Create subregion for the spectrum
-    velocity_spectrum = extract_region_in_spectrum(new_spectrum,spec_region)
+    velocity_region_to_extract = sp.SpectralRegion(
+        constraint[0],
+        constraint[1]
+        )
+    
+    velocity_spectrum = extract_region_in_spectrum(velocity_spectrum,
+                                                   velocity_region_to_extract)
     return velocity_spectrum
+
+def velocity_fold_single_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
+                                  line_list: list,
+                                  constraint: list = [-100,100]*u.km/u.s
+                                  ) -> sp.Spectrum1D | sp.SpectrumCollection:
+    """
+    Folds a single spectrum across velocity list, and return an average of them.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to velocity fold across line list.
+    line_list : list
+        Line list to velocity fold over.
+    constraint : list, optional
+        Constraint to cut the spectrum velocity range to, by default [-100,100]*u.km/u.s.
+
+    Returns
+    -------
+    sp.Spectrum1D | sp.SpectrumCollection
+        Velocity folded spectrum.
+    """
+    
+    spectra_separate_lines = sp.SpectrumList()
+    for line in line_list: # For cycle through all lines           
+        spectra_separate_lines.append(velocity_domain_sgl(spectrum,
+                                                          line,
+                                                          constraint=constraint
+                                                          )
+                                      ) # Shift to velocity domain
+
+    spectra_separate_lines = binning_list(spectra_separate_lines)
+    
+    if len(spectra_separate_lines) != 1:
+        for left, right in pairwise(spectra_separate_lines):
+            assert left.spectral_axis is right.spectral_axis, 'The rebinning on the same wavelength grid failed'
+    
+    velocity_spectrum = smcalc._calculate_master(spectra_separate_lines)
+    return velocity_spectrum
+
+
 #%% velocity_fold
 def velocity_fold(spec_list,line_list,constraint=[-100,100]*u.km/u.s):
     """
@@ -1652,8 +1706,6 @@ def velocity_fold(spec_list,line_list,constraint=[-100,100]*u.km/u.s):
         for line in line_list: # For cycle through all lines           
             spec_list_velocity.append(velocity_domain_sgl(spectrum,line,constraint=constraint)) # Shift to velocity domain
 
-            # print(velocity_domain_sgl(spectrum,line,constraint=constraint).flux)
-            
         spec_list_velocity = binning_list(spec_list_velocity)
         flux = []
         uncertainty = []
