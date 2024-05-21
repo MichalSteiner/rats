@@ -275,39 +275,76 @@ def master_list_test(spectrum_list: sp.SpectrumList,
                     type='data',  # value of error bar given in data coordinates
                     array=yerr,
                 ),
-                name=f'Night {spectrum.meta["num_night"]}',
+                name=f'Night {spectrum.meta["num_night"]}_binned',
                 mode='markers',
                 marker= {
                     'color': f'rgba{*COLOR_WHEEL_DARK[ind], 0.8}',
                     },
                 connectgaps=False,
                 visible=visibility,
-                legendgroup = f'{ind}',
+                legendgroup = f'{ind}_binned',
                 meta= {
                     'binning_factor': 15,
                     'night': ind,
+                    'orig_spectrum': spectrum,
                 }
             )
         fig.add_trace(errorbar_binned_plot)
         
+    
+    # slider_x = [[val * scale if (val.meta['binning_factor'] != 'combined') else val for idx, val in enumerate(x)] for x in x_data]
+    
+    # steps =  [
+    #     {
+    #         'label': f'Binning factor: {binning_factor}',
+    #         'method': 'restyle',
+    #         'args': [
+    #             {'x': [[sm.binning_spectrum(x.meta['orig_spectrum'], binning_factor)[0]
+    #                     if x.meta['binning_factor'] != 'combined'
+    #                     else val for idx, val in enumerate(x)] for x in x_data],
+    #              'y': [[sm.binning_spectrum(x.meta['orig_spectrum'], binning_factor)[1]
+    #                     if x.meta['binning_factor'] != 'combined'
+    #                     else val for idx, val in enumerate(y)] for y in y_data],
+    #              f'error_y.array': [[sm.binning_spectrum(x.meta['orig_spectrum'], binning_factor)[2]
+    #                                  if x.meta['binning_factor'] != 'combined'
+    #                                  else val for idx, val in enumerate(error)] for error in error_data]},
+    #         ]
+    #     } for binning_factor in range(2, 101)
+    # ]
+    
+    # # Create layout with slider
+    # layout = go.Layout(
+    #     sliders=[{
+    #         'active': 15,
+    #         'currentvalue': {'prefix': 'Binning Factor: '},
+    #         'pad': {'t': 50},
+    #         'steps': [{'label': str(binning_factor), 'method': 'restyle', 'args': [
+    #             {
+    #                 'x': [sm.binning_spectrum(spectrum, binning_factor)[0]],
+    #                 'y': [sm.binning_spectrum(spectrum, binning_factor)[1]],
+    #                 'error_y.array': [sm.binning_spectrum(spectrum, binning_factor)[2]],
+    #             }
+    #                 ]
+    #             } for binning_factor in range(2, 101)]
+    #     }]
+    # )
         
-        # Create layout with slider
-        layout = go.Layout(
-            sliders=[{
-                'active': 15,
-                'currentvalue': {'prefix': 'Binning Factor: '},
-                'pad': {'t': 50},
-                'steps': [{'label': str(binning_factor), 'method': 'restyle', 'args': [
-                 {
-                     'x': [sm.binning_spectrum(spectrum, binning_factor)[0]],
-                     'y': [sm.binning_spectrum(spectrum, binning_factor)[1]],
-                     'error_y.array': [sm.binning_spectrum(spectrum, binning_factor)[2]]
-                 }
-                     ]
-                 } for binning_factor in range(2, 101)]
-            }]
-        )
-        fig.update_layout(layout)
+    #     fig.update_layout(sliders=[{
+    #                         'active': 0,
+    #                         'steps': [
+    #                             {
+    #                                 'label': f'Scale: {scale}',
+    #                                 'method': 'restyle',
+    #                                 'args': [
+    #                                     {'x': [[val * scale if idx in [0, 2] else val for idx, val in enumerate(x)] for x in x_data],
+    #                                     'y': [[val * scale if idx in [0, 2] else val for idx, val in enumerate(y)] for y in y_data],
+    #                                     f'error_y.array': [[val * scale if idx in [0, 2] else val for idx, val in enumerate(error)] for error in error_data]}
+    #                                 ]
+    #                             } for scale in range(1, 11)
+    #                         ]
+    #                     }])
+        
+        # fig.update_layout(layout)
     linelist.add_line_plotly(fig)
     
     
@@ -320,13 +357,22 @@ def master_list_test(spectrum_list: sp.SpectrumList,
 
 
 def plot_all_species_transmission(spectrum_list: sp.SpectrumList,
+                                  prepend: str = '',
                                   ):
     for line in ratslist.RESOLVED_LINE_LIST:
         master_list(
             spectrum_list= spectrum_list,
             linelist= line,
+            prepend= prepend
             )
     return
+
+def plot_all_species_transmission_velocity():
+    ...
+
+
+
+
 
 def colormap(spectrum_list: sp.SpectrumList):
     

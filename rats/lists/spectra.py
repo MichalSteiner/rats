@@ -126,15 +126,30 @@ class _ProminentLines:
     
     def velocity_fold(self,
                       spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection,
-                      constraint: list = [-200, 201]*u.km/u.s):
-        
+                      constraint: list = [-200, 201]*u.km/u.s) -> tuple[sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection, sp.SpectrumList]:
+        """
+        Velocity folding based on the line list attribute.
+
+        Parameters
+        ----------
+        spectra : sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection
+            Spectra to velocity fold. Can be in any specutils format.
+        constraint : list, optional
+            Constraint to limit the region to, by default [-200, 201]*u.km/u.s
+
+        Returns
+        -------
+        sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection
+            Velocity folded and averaged spectra. Shape is (len(spectra))
+        sp.SpectrumList
+            Separate lines separated in velocity range. Shape is (len(spectra), len(self.lines))
+        """
         if type(spectra) == sp.SpectrumList:
-            new_spectra = sm.velocity_fold(spectra)
+            new_spectra, separate_line_spectra = sm.velocity_fold_spectrum_list(spectra, self.lines)
         else:
-            new_spectra = sm.velocity_fold(spectra)
+            new_spectra, separate_line_spectra = sm.velocity_fold_single_spectrum(spectra, self.lines)
+        return new_spectra, separate_line_spectra
         
-        
-        ...
     
     def extract_region(self,
                        spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection,
@@ -193,8 +208,16 @@ Sodium_doublet = _ProminentLines(
 
 Balmer_series = _ProminentLines(
     'Balmer series',
-    [6562.79*u.AA],
-    sp.SpectralRegion(6559*u.AA, 6566*u.AA)
+    [6562.79*u.AA,
+    #  4861.35*u.AA,
+    #  4340.472 *u.AA,
+    #  4101.734 * u.AA
+     ],
+    (sp.SpectralRegion(6559*u.AA, 6566*u.AA) #+ 
+    #  sp.SpectralRegion(4855*u.AA, 4865*u.AA) + 
+    #  sp.SpectralRegion(4335*u.AA, 4345*u.AA) + 
+    #  sp.SpectralRegion(4095*u.AA, 4105*u.AA))
+    )
     )
 
 Potassium_doublet = _ProminentLines(
