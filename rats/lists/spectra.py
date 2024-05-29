@@ -105,7 +105,7 @@ class _ProminentLines:
         fitted_model = fit(model, spectrum.spectral_axis, spectrum.flux)
         return fitted_model
 
-        
+    
     def local_normalization(self,
                             spectrum_list: sp.SpectrumList,
                             polynomial_order: int = 1,
@@ -190,7 +190,7 @@ class _ProminentLines:
             new_spectra = self.local_normalization(new_spectra,
                                                    **kwargs)
         if velocity_folding:
-            new_spectra = self.velocity_fold(new_spectra)
+            new_spectra, _ = self.velocity_fold(new_spectra)
 
         return new_spectra
     

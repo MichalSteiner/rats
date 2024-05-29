@@ -337,8 +337,8 @@ out_spectrum = sm.calculate_master_list(data_PRF,
                                         force_skip = force_skip,
                                         pkl_name = 'out_corrected_out_PRF_spectrum.pkl'
                                         )
-transmission_spectrum = sm.replace_flux_units_transmission(transmission_spectrum, R)
-out_spectrum = sm.replace_flux_units_transmission(out_spectrum, R)
+transmission_spectrum = sm.replace_flux_units(transmission_spectrum, R)
+out_spectrum = sm.replace_flux_units(out_spectrum, R)
 
 #%% Plot transmission spectrum
 # =============================================================================

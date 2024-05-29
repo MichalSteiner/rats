@@ -28,6 +28,7 @@ def observation_log(spectrum_list: sp.SpectrumList):
     """
     # Array allocation
     exposure_time = np.asarray([spectrum.meta['Exptime'].value for spectrum in spectrum_list])
+    transit_flags = np.asarray([spectrum.meta['Transit_partial'] for spectrum in spectrum_list])
     seeing = np.asarray([spectrum.meta['Seeing'] for spectrum in spectrum_list])
     airmass = np.asarray([spectrum.meta['Airmass'] for spectrum in spectrum_list])
     snr = np.asarray([spectrum.meta['Average_S_N'] for spectrum in spectrum_list])
@@ -35,16 +36,20 @@ def observation_log(spectrum_list: sp.SpectrumList):
     Nights = np.asarray([spectrum.meta['Night'] for spectrum in spectrum_list])
     Instruments = np.asarray([spectrum.meta['instrument'] for spectrum in spectrum_list])
     
+    
     night_list, indices = np.unique(np.asarray(Night_num), return_index=True)
     # Create table
     Observation_log_table = texttable.Texttable()
-    Observation_log_table.set_cols_align(['l','l','l','r','r','r','r'])
+    Observation_log_table.set_cols_align(['l','l','l','r','r','r','r','r'])
     # Create header
-    table_rows = [["Night", "Night \#", "Instrument", 'Exposure time [s]', 'Seeing ["]', 'Airmass','S/N']]
+    table_rows = [["Night", "Night \#", "Instrument", 'In/Total \#','Exposure time [s]', 'Seeing ["]', 'Airmass','S/N']]
     # Loop over all nights and extract values for given row
     for ind, night_num in enumerate(night_list):
         night = Nights[indices[night_num-1]]
         mean_exposure_time = round(np.nanmean(exposure_time[Nights==night]),-1)
+        
+        in_transit = sum(transit_flags[Nights==night])
+        out_transit = len(transit_flags[Nights==night])
         
         min_seeing, median_seeing, max_seeing = (round(np.nanmin(seeing[Nights==night]), 2),
                                                  round(np.nanmedian(seeing[Nights==night]), 2),
@@ -67,15 +72,16 @@ def observation_log(spectrum_list: sp.SpectrumList):
             str(night_number),
             str(instrument),
             str(mean_exposure_time),
+            (str(in_transit) + '/' + str(out_transit)),
             ('{:.2f}'.format(min_seeing) + ' - ' + '{:.2f}'.format(median_seeing) + ' - ' + '{:.2f}'.format(max_seeing)),
             ('{:.2f}'.format(min_airmass)+' - ' + '{:.2f}'.format(median_airmass) + ' - ' + '{:.2f}'.format(max_airmass)),
             ('{:.0f}'.format(min_sn) + ' - ' + '{:.0f}'.format(median_sn) + ' - ' + '{:.0f}'.format(max_sn))
             ]
         )
     # Add all rows to table and print the output
-    Observation_log_table.add_rows(table_rows)
+Observation_log_table.add_rows(table_rows)
     print(latextable.draw_latex(Observation_log_table,
-                                caption="Observation log table. The columns from left to right are: Date of observing night, the number of night, used instrument, seeing, airmass, average S/N. Note that for seeing airmass and average S/N, we provide the value in min-median-max format. S/N is average over all orders for given instrument.",
+                                caption="Observation log table. The columns from left to right are: Date of observing night, the number of night, used instrument, number of in transit and total number of spectra in given night, seeing, airmass, average S/N. Note that for seeing airmass and average S/N, we provide the value in min-median-max format. S/N is average over all orders for given instrument. For ESPRESSO, this doesn't account for double order structure of the spectra, meaning the total SNR is generally higher by a factor of $\sqrt\{2\}$",
                                 label="tab:observation_log",
                                 use_booktabs=True)
           )

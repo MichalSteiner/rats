@@ -237,16 +237,11 @@ def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
     """
     main_header = fits_hdulist[0].header # Preparing header of spectra
     
-    for key in fits_hdulist[0].header.keys():
-        if key.startswith('ESO PRO REC1 PARAM') and key.endswith('NAME'):
-            if fits_hdulist[0].header[key] == 'rv_center':
-                rv_center = float(fits_hdulist[0].header[key.replace('NAME', 'VALUE')])
-            if fits_hdulist[0].header[key] == 'rv_range':
-                rv_range = float(fits_hdulist[0].header[key.replace('NAME', 'VALUE')])
-            if fits_hdulist[0].header[key] == 'rv_step':
-                rv_step = float(fits_hdulist[0].header[key.replace('NAME', 'VALUE')])
-    rv_range = np.arange(rv_center - rv_range, rv_center + rv_range + rv_step, rv_step)
+    rv_start = main_header['HIERARCH ESO RV START']
+    rv_step = main_header['HIERARCH ESO RV STEP']
+    
     flux_total = fits_hdulist['SCIDATA'].data[-1] * u.ct
+    rv_range = np.linspace(rv_start, rv_step, len(flux_total))
     error_total = astropy.nddata.StdDevUncertainty(fits_hdulist['ERRDATA'].data[-1])
     
     meta = _basic_meta_parameters()
@@ -270,7 +265,7 @@ def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
         )
     return spectrum
   
-#%% Load all spectra from project
+#%% Load all spectra from projec
 @save_and_load
 @progress_tracker
 @time_function
@@ -433,6 +428,7 @@ def load_night(night_directory: str,
             continue
         logger.debug('Opening spectrum with filename:')
         logger.debug(spectra_directory + '/' + filename)
+        
         spectra_list.append(
             load_spectrum(
                 filename= spectra_directory + '/' + filename

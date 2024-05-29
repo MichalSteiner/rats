@@ -478,7 +478,6 @@ def tie_wlg(model):
     return model.mean_0 + (5895.924-5889.950)
 
 #%% get_sublist
-@time_function
 def get_sublist(spectrum_list: sp.SpectrumList,
                 key: str,
                 value: Any,
@@ -573,10 +572,11 @@ def binning_spectrum(spectrum: sp.Spectrum1D,
     # Shouldn't this be returned as spectrum? On one side, it makes more sense to return it as sp.Spectrum1D, on other, it will be tricky to use rebinning animations as such.
     
     if as_spectrum:
+        mask = np.isfinite(x.statistic)
         binned_spectrum = sp.Spectrum1D(
-            spectral_axis= x.statistic * spectrum.spectral_axis.unit,
-            flux = y.statistic * spectrum.flux.unit,
-            uncertainty= astropy.nddata.StdDevUncertainty(y_err.statistic),
+            spectral_axis= x.statistic[mask] * spectrum.spectral_axis.unit,
+            flux = y.statistic[mask] * spectrum.flux.unit,
+            uncertainty= astropy.nddata.StdDevUncertainty(y_err.statistic[mask]),
             meta= spectrum.meta.update(
                 {'binning_factor': bin_factor}
                 )
@@ -584,6 +584,17 @@ def binning_spectrum(spectrum: sp.Spectrum1D,
         return binned_spectrum
     else:
         return x.statistic,y.statistic,y_err.statistic
+
+def finder(array_original, array_shifted):
+    dup = np.searchsorted(array_original, array_shifted)
+    uni = np.unique(dup)
+    uni = uni[uni < array_original.shape[0]]
+    ret_b = np.zeros(uni.shape[0])
+    for idx, val in enumerate(uni):
+        bw = np.argmin(np.abs(array_original[val]-array_shifted[dup == val]))
+        tt = dup == val
+        ret_b[idx] = np.where(tt == True)[0][bw]
+    return ret_b
 
 #%% shift_spectrum
 def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection, 
@@ -639,13 +650,27 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
         warnings.simplefilter("ignore")
         new_uncertainty = np.sqrt(interpolate_error(spectrum.spectral_axis)) # Interpolate on the old wave_grid
     
-
-    # Masking values that were NaN - not optimal # TODO
+    # Last indice is an optimalization trick to cut down the amount of searching in array, as both array are sorted.
+    last_indice= 0
     for masked_pixel in new_x_axis[mask]:
-        index = (np.abs(spectrum.spectral_axis.value - masked_pixel.value)).argmin()
-        new_flux[index] = np.nan
-        new_uncertainty[index] = np.nan
-
+        
+        ind = np.searchsorted(spectrum.spectral_axis.bin_edges[last_indice:].value, masked_pixel.value)
+        if ind + last_indice > len(spectrum.spectral_axis):
+            continue # If the mask goes outside the bin edges of the spectral axis, ignore
+        elif (ind + last_indice) == 0 and masked_pixel < spectrum.spectral_axis.bin_edges[0]:
+            continue
+        
+        ind = ind + last_indice
+        new_flux[ind-1] = np.nan
+        new_uncertainty[ind-1] = np.nan
+        last_indice = ind
+        if ((spectrum.spectral_axis.bin_edges[ind-1].value > masked_pixel.value) or
+            (masked_pixel.value > spectrum.spectral_axis.bin_edges[ind].value) or
+            (spectrum.spectral_axis.bin_edges[ind-1].value > spectrum.spectral_axis[ind-1].value) or
+            (spectrum.spectral_axis.bin_edges[ind].value < spectrum.spectral_axis[ind-1].value)
+            ):
+            raise ValueError('There is an indice offset error. The condition that the masked pixel wavelength and the corresponding spectral_axis wavelength falls between the correct bin edges is not working.')
+    
     new_mask_flux = np.isnan(new_flux)
     new_mask_err = np.isnan(new_uncertainty)
     new_mask = np.logical_or(new_mask_flux, new_mask_err)
@@ -673,6 +698,7 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
         logger.info('Finished correctly')
     
     return new_spectrum
+
 
 #%% interpolate2commonframe
 @singledispatch
@@ -1103,36 +1129,61 @@ def normalize_list(spectrum_list: sp.SpectrumList,
 
 #%% replace_flux_units_transmission
 @save_and_load
-def replace_flux_units_transmission(spec_list, unit, force_load = False, force_skip= False, pkl_name = ''):
+def replace_flux_units(spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection,
+                       unit: u.Unit,
+                       force_load:bool = False,
+                       force_skip:bool = False,
+                       pkl_name:str = '') -> sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection:
     """
-    Replace the flux units in the transmission spectra
+    Replaces flux unit to specified one.
+    
+    This function does not modify the flux or uncertainty, unlike sp.Spectru1D.with_flux_unit(). Its purpose is to add unit after it has been lost.
 
     Parameters
     ----------
-    spec_list : sp.SpectrumList
-        Transmission spectra list.
-    unit : TYPE
-        Unit to replace the arbitrary dimensionless unit.
+    spectrum_list : sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum list to add unit to
+    unit : u.Unit
+        Unit to add to 
+    force_load : bool, optional
+        Whether to force loading of result (True), instead of calculation (False), by default False
+    force_skip : bool, optional
+        Whether to skip running the function completely (True), or run normally (False), by default False
+    pkl_name : str, optional
+        Pickle name to use, by default ''.
 
     Returns
     -------
-    new_spec_list : sp.SpectrumList
-        Transmission spectra list with updated units.
-
+    sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection
+        Spectra with replaced unit.
     """
-    new_spec_list = sp.SpectrumList()
     
-    for spectrum in spec_list:
+    if type(spectra) == sp.SpectrumList:
+        new_spec_list = sp.SpectrumList()
+        for spectrum in spectra:
+            new_spectrum = sp.Spectrum1D(
+                spectral_axis = spectrum.spectral_axis,
+                flux = spectrum.flux.value * unit,
+                uncertainty = astropy.nddata.StdDevUncertainty(spectrum.uncertainty.array),
+                mask = spectrum.mask,
+                meta = spectrum.meta,
+                )
+            new_spec_list.append(new_spectrum)
+        return new_spec_list
+    
+    elif type(spectra) == sp.Spectrum1D:
         new_spectrum = sp.Spectrum1D(
-            spectral_axis = spectrum.spectral_axis,
-            flux = spectrum.flux.value * unit,
-            uncertainty = astropy.nddata.StdDevUncertainty(spectrum.uncertainty.array * unit),
-            mask = spectrum.mask,
-            meta = spectrum.meta,
+            spectral_axis = spectra.spectral_axis,
+            flux = spectra.flux.value * unit,
+            uncertainty = astropy.nddata.StdDevUncertainty(spectra.uncertainty.array),
+            mask = spectra.mask,
+            meta = spectra.meta,
             )
-        new_spec_list.append(new_spectrum)
-    
-    return new_spec_list
+        return new_spectrum
+    elif type(spectra) == sp.SpectrumCollection:
+        raise NotImplementedError('Spectrum Collections are not yet supported')
+    else:
+        raise TypeError('Spectrum type is wrong')
 #%% cosmic_correction
 @time_function
 @progress_tracker
@@ -1302,7 +1353,7 @@ def master_out_correction(spectrum_list: sp.SpectrumList,
         
         corrected_list.append(divided_spectrum)
     if unit is not None:
-        corrected_list = replace_flux_units_transmission(corrected_list, unit)
+        corrected_list = replace_flux_units(corrected_list, unit)
     
     return corrected_list
 #%%
