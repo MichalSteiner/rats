@@ -12,11 +12,26 @@ import os
 import rats.spectra_manipulation as sm
 import rats.parameters
 import astropy.units as u
+from astropy.nddata import StdDevUncertainty
 from rats.utilities import time_function, save_and_load, default_logger_format, progress_tracker
 import logging
 
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
+
+'''Shifting air to vac and vac to air wavelength'''
+def _airtovac(wlnm):
+    wlA=wlnm*10.0
+    s = 1e4 / wlA
+    n = 1 + 0.00008336624212083 + 0.02408926869968 / (130.1065924522 - s**2) + 0.0001599740894897 / (38.92568793293 - s**2)
+    return(wlA*n/10.0)
+
+def _vactoair(wlnm):
+    wlA = wlnm*10.0
+    s = 1e4/wlA
+    f = 1.0 + 5.792105e-2/(238.0185e0 - s**2) + 1.67917e-3/( 57.362e0 - s**2)
+    return(wlA/f/10.0)
+
 
 def _get_planet(planet_name: str) -> planet.Planet:
     """
@@ -198,7 +213,6 @@ def _calculate_transmission_model(atmosphere: prt.Radtrans,
     wavelengths, transit_radii, interpolated_transit_radii [np.ndarray, np.ndarray, np.ndarray]
         Wavelengths and transit radii obtained by the model, and interpolated transit radii on the requested spectral axis
     """
-    
     reference_gravity = SystemParameters.Planet.gravity_acceleration.convert_unit_to(u.cm/u.s/u.s).data
     planet_radius = SystemParameters.Planet.radius.convert_unit_to(u.cm).data
     
@@ -208,11 +222,13 @@ def _calculate_transmission_model(atmosphere: prt.Radtrans,
                                                                    reference_gravity=reference_gravity,
                                                                    planet_radius=planet_radius,
                                                                    reference_pressure=reference_pressure)
-    
-    flux_interpolation = scipy.interpolate.CubicSpline(wavelengths, transit_radii)
+    wavelengths_air = ((_vactoair((wavelengths*u.cm).to(u.nm).value))*u.nm).to(u.cm).value
+    flux_interpolation = scipy.interpolate.CubicSpline(wavelengths_air, transit_radii)
     interpolated_transit_depth = flux_interpolation(spectral_axis.to(u.cm).value)
     
-    return wavelengths, transit_radii, interpolated_transit_depth
+    return wavelengths_air, transit_radii, interpolated_transit_depth
+
+
 
 def _remove_continuum(spectral_axis: sp.SpectralAxis,
                       flux: np.ndarray

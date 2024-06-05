@@ -13,9 +13,10 @@ import rats.spectra_manipulation_subroutines.calculation as smcalc
 import logging
 import astropy.nddata as nd
 from rats.utilities import default_logger_format, time_function
-from pathos.multiprocessing import Pool
 from itertools import repeat
+from mpire import WorkerPool, cpu_count
 
+NUM_CORES = cpu_count() - 1
 #%% Setting up logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
@@ -28,7 +29,7 @@ def cross_correlate_list(
     model: sp.Spectrum1D,
     velocities: u.Quantity = np.arange(-200, 200.5, 0.5) * u.km/u.s,
     sn_type: str | None = None,
-    force_multiprocessing: bool = False) -> sp.SpectrumList:
+    force_multiprocessing: bool = True) -> sp.SpectrumList:
     """
     Cross-correlate branch for sp.Spectrum1D objects. 
 
@@ -56,16 +57,16 @@ def cross_correlate_list(
     
     if force_multiprocessing:
         logger.warning('Starting multiprocessing - CCF calculation | This is extremely memory heavy.')
-        with Pool(processes=16, maxtasksperchild=10) as p:
-            CCF_flux = p.starmap(_CCF_multiprocessing_wrapper,
-                                 zip(
-                                     repeat(spectrum_list),
-                                     repeat(model),
-                                     velocities,
-                                     repeat(sn_type),
-                                     )
-                                 )
-        CCF_flux = np.asarray(CCF_flux).transpose()
+        weights = smcalc._gain_weights_list(spectrum_list, sn_type= sn_type)
+        flux_list = astropy.nddata.NDDataArray([item.flux for item in spectrum_list])
+        flux_list = np.nan_to_num(flux_list.data, nan=0.0)
+        
+        with WorkerPool(n_jobs=NUM_CORES, shared_objects=(flux_list, weights, model)) as pool:
+            CCF_flux = pool.map(_CCF_multiprocessing_wrapper,
+                                velocities,
+                                progress_bar=True,
+                                chunk_size=1)
+        CCF_flux = CCF_flux.reshape(len(velocities), len(spectrum_list)).T
         logger.warning('Finished multiprocessing - CCF calculation')
     else:
         for ind, velocity in enumerate(velocities):
@@ -75,9 +76,12 @@ def cross_correlate_list(
                 spectrum= model,
                 velocities= [-velocity]
                 )
+            flux_list = astropy.nddata.NDDataArray([item.flux for item in spectrum_list])
+            
             CCF_flux[:, ind] = _calculate_CCF_single_velocity(
                 spectrum_list= spectrum_list,
                 shifted_model= shifted_model,
+                flux_list= flux_list,
                 sn_type= sn_type)
         
     CCF_list = sp.SpectrumList()
@@ -92,10 +96,9 @@ def cross_correlate_list(
             )
     return CCF_list
 
-def _CCF_multiprocessing_wrapper(spectrum_list: sp.SpectrumList,
-                                 model: sp.Spectrum1D | sp.SpectrumCollection,
-                                 velocity: u.Quantity,
-                                 sn_type: str | None) -> astropy.nddata.NDDataArray:
+def _CCF_multiprocessing_wrapper(shared_objects: tuple,
+                                 velocity: u.Quantity, # Iterated
+                                 ) -> astropy.nddata.NDDataArray:
     """
     CCF calculation wrapper for multiprocessing function. It is a 2-step function of first shifting the template model and then calculation of the CCF array.
 
@@ -115,19 +118,24 @@ def _CCF_multiprocessing_wrapper(spectrum_list: sp.SpectrumList,
     CCF_flux : astropy.nddata.NDDataArray
         The CCF values for all spectra in spectrum list.
     """
-    
+    # flux_list = shared_objects[0]
+    # weights= shared_objects[1]
+    # model =shared_objects[2]
     shifted_model = sm._shift_spectrum(
-        spectrum= model,
+        spectrum= shared_objects[2],
         velocities= [-velocity]
         )
-    CCF_flux = _calculate_CCF_single_velocity(spectrum_list= spectrum_list,
-                                              shifted_model= shifted_model,
-                                              sn_type= sn_type)
+    CCF_flux = _calculate_CCF_single_velocity_test(
+        weights= shared_objects[1],
+        shifted_model= shifted_model,
+        flux_list= shared_objects[0],
+        )
     return CCF_flux
 
 #%%
 def _calculate_CCF_single_velocity(spectrum_list: sp.SpectrumList,
                                    shifted_model: sp.Spectrum1D | sp.SpectrumCollection,
+                                   flux_list: astropy.nddata.NDDataArray,
                                    sn_type: str | None = None) -> astropy.nddata.NDDataArray:
     """
     Calculate CCF values for single velocity, provided spectrum list and shifted model.
@@ -152,7 +160,6 @@ def _calculate_CCF_single_velocity(spectrum_list: sp.SpectrumList,
 
     # Allocate arrays
     weights = smcalc._gain_weights_list(spectrum_list, sn_type= sn_type)
-    flux_list = astropy.nddata.NDDataArray([item.flux for item in spectrum_list])
     model_flux = np.repeat(shifted_model.flux[np.newaxis, :], len(spectrum_list), axis=0)
 
     # Run the calculation of weighted CCF
@@ -166,6 +173,17 @@ def _calculate_CCF_single_velocity(spectrum_list: sp.SpectrumList,
             CCF_Flux = flux_list.multiply(true_weight)
             CCF_value = np.apply_over_axes(np.nansum, CCF_Flux, [1,2]) / np.apply_over_axes(np.nansum, true_weight, [1,2])
     return CCF_value
-# %%
 
+def _calculate_CCF_single_velocity_test(weights: astropy.nddata.NDDataArray,
+                                   shifted_model: sp.Spectrum1D | sp.SpectrumCollection,
+                                   flux_list: astropy.nddata.NDDataArray
+                                   ) -> astropy.nddata.NDDataArray:
 
+    if type(shifted_model) == sp.SpectrumCollection:
+        raise NotImplementedError('Not supported yet!')
+
+    template = shifted_model.flux[:, np.newaxis] * weights.data.T
+    template = template / np.nansum(template,axis=0)
+    template = np.nan_to_num(template, nan=0.0)
+    
+    return np.diag(flux_list @ template)

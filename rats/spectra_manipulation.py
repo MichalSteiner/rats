@@ -1433,7 +1433,7 @@ def exciser_fill_with_nan(spectrum,region):
 
     new_spectral_axis = spectrum.spectral_axis.copy()
     new_flux = spectrum.flux.copy()
-    modified_flux = new_flux
+    modified_flux = new_flux.value
     modified_flux[excise_indices] = np.nan
     if spectrum.mask is not None:
 
@@ -1449,7 +1449,7 @@ def exciser_fill_with_nan(spectrum,region):
         new_uncertainty = None
 
     # Return a new object with the regions excised.
-    return sp.Spectrum1D(flux=modified_flux,
+    return sp.Spectrum1D(flux=modified_flux * new_flux.unit,
                       spectral_axis=new_spectral_axis,
                       uncertainty=new_uncertainty,
                       mask=new_mask,

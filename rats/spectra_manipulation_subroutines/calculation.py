@@ -229,9 +229,9 @@ def _cosmic_correction_night(sublist):
     median = np.nanmedian(flux_all, axis=0)
     
     for ii, item in enumerate(sublist):
-        ind = np.where((item.flux.value - median) > item.uncertainty.array * 5)
+        ind = abs(item.flux.value - median) > item.uncertainty.array * 5
         flux = item.flux.value
-        flux[ind] = median[ind]
+        flux[ind] = np.nan
         
         new_spec_list.append(
             sp.Spectrum1D(
@@ -496,8 +496,8 @@ def _calculate_mean_master(spectrum_list: sp.SpectrumList,
 #%% 
 def _calculate_mean_master_collection(
     spectrum_list: sp.SpectrumList,
-    master: sp.Spectrum1D,
-    weight_sum: sp.Spectrum1D,
+    master: sp.SpectrumCollection,
+    weight_sum: sp.SpectrumCollection,
     spectrum_type: str = '',
     night: str = '',
     num_night: str = '',
@@ -672,7 +672,8 @@ def _gain_weights(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
         case 'quadratic_combined':
             weights = weights.multiply(spectrum.uncertainty.array**2 * u.dimensionless_unscaled)
             weights = weights.multiply(spectrum.meta['delta']**2 * u.dimensionless_unscaled)
-            
+    
+    weights = weights.multiply(np.isfinite(spectrum.flux)*u.dimensionless_unscaled)
     
     return weights
 
@@ -705,7 +706,9 @@ def _gain_weights_list(spectrum_list: sp.SpectrumList,
     weights : astropy.nddata.NDDataArray
         Weights for the spectrum list.
     """
-    weights = NDDataArray(data = ([np.isfinite(item.flux) for item in spectrum_list]))
+    weights = NDDataArray(data = ([np.logical_and(np.isfinite(item.flux),
+                                                 np.isfinite(item.uncertainty.array)
+                                                  ) for item in spectrum_list]))
     
     # TESTME
     match sn_type:
