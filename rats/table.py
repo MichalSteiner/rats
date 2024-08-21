@@ -35,16 +35,18 @@ def observation_log(spectrum_list: sp.SpectrumList):
     Night_num = np.asarray([spectrum.meta['Night_num'] for spectrum in spectrum_list])
     Nights = np.asarray([spectrum.meta['Night'] for spectrum in spectrum_list])
     Instruments = np.asarray([spectrum.meta['instrument'] for spectrum in spectrum_list])
+    program_ID = np.asarray([spectrum.meta['header']['HIERARCH ESO OBS PROG ID'] for spectrum in spectrum_list])
     
+    night_list, indices = np.unique(Night_num, return_index=True)
+    program_ID = program_ID[indices]
     
-    night_list, indices = np.unique(np.asarray(Night_num), return_index=True)
     # Create table
     Observation_log_table = texttable.Texttable()
-    Observation_log_table.set_cols_align(['l','l','l','r','r','r','r','r'])
+    Observation_log_table.set_cols_align(['l','l','l','l','r','r','r','r','r'])
     # Create header
-    table_rows = [["Night", "Night \#", "Instrument", 'In/Total \#','Exposure time [s]', 'Seeing ["]', 'Airmass','S/N']]
+    table_rows = [["Night", "Night \#", "Instrument",'prog. ID','Exposure time [s]','In/Total \#', 'Seeing ["]', 'Airmass','S/N']]
     # Loop over all nights and extract values for given row
-    for ind, night_num in enumerate(night_list):
+    for ind, (night_num, prog_ID) in enumerate(zip(night_list, program_ID)):
         night = Nights[indices[night_num-1]]
         mean_exposure_time = round(np.nanmean(exposure_time[Nights==night]),-1)
         
@@ -71,6 +73,7 @@ def observation_log(spectrum_list: sp.SpectrumList):
             str(night),
             str(night_number),
             str(instrument),
+            str(prog_ID),
             str(mean_exposure_time),
             (str(in_transit) + '/' + str(out_transit)),
             ('{:.2f}'.format(min_seeing) + ' - ' + '{:.2f}'.format(median_seeing) + ' - ' + '{:.2f}'.format(max_seeing)),
@@ -79,10 +82,10 @@ def observation_log(spectrum_list: sp.SpectrumList):
             ]
         )
     # Add all rows to table and print the output
-Observation_log_table.add_rows(table_rows)
+    Observation_log_table.add_rows(table_rows)
     print(latextable.draw_latex(Observation_log_table,
-                                caption="Observation log table. The columns from left to right are: Date of observing night, the number of night, used instrument, number of in transit and total number of spectra in given night, seeing, airmass, average S/N. Note that for seeing airmass and average S/N, we provide the value in min-median-max format. S/N is average over all orders for given instrument. For ESPRESSO, this doesn't account for double order structure of the spectra, meaning the total SNR is generally higher by a factor of $\sqrt\{2\}$",
+                                caption="Observation log table. The columns from left to right are: Date of observing night, the number of night, used instrument, program number, exposure time, number of in transit and total number of spectra in given night, seeing, airmass, average S/N. Note that for seeing airmass and average S/N, we provide the value in min-median-max format. S/N is average over all orders for given instrument. For ESPRESSO, this doesn't account for double order structure of the spectra, meaning the total SNR is generally higher by a factor of $\sqrt\{2\}$",
                                 label="tab:observation_log",
                                 use_booktabs=True)
-          )
+        )
     return

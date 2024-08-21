@@ -872,7 +872,16 @@ class ModellingLightCurve:
         
         import batman
         #DOCUMENTME
-        u1, u2 = self.Star.calculate_limb_darkening_coefficients()
+        try:
+            import pickle
+            with open('./saved_data/limb_darkening_coefficients.pkl', 'rb') as input_file:
+                u1, u2 =  pickle.load(input_file)
+        except:        
+            u1, u2 = self.Star.calculate_limb_darkening_coefficients()
+            import pickle
+            with open('./saved_data/limb_darkening_coefficients.pkl', 'wb') as output_file:
+                pickle.dump([u1,u2],output_file)
+                
         
         params = batman.TransitParams()
         params.t0 = self.Ephemeris.transit_center.data                       #time of inferior conjunction

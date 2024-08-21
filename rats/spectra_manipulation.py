@@ -22,6 +22,7 @@ from itertools import repeat
 from copy import deepcopy
 import astropy.constants as con
 import pickle
+from scipy.interpolate import CubicSpline
 # import polars as pl
 import warnings
 import math
@@ -651,25 +652,26 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
         new_uncertainty = np.sqrt(interpolate_error(spectrum.spectral_axis)) # Interpolate on the old wave_grid
     
     # Last indice is an optimalization trick to cut down the amount of searching in array, as both array are sorted.
-    last_indice= 0
-    for masked_pixel in new_x_axis[mask]:
+    # last_indice= 0
+
+    # for masked_pixel in new_x_axis[mask]:
         
-        ind = np.searchsorted(spectrum.spectral_axis.bin_edges[last_indice:].value, masked_pixel.value)
-        if ind + last_indice > len(spectrum.spectral_axis):
-            continue # If the mask goes outside the bin edges of the spectral axis, ignore
-        elif (ind + last_indice) == 0 and masked_pixel < spectrum.spectral_axis.bin_edges[0]:
-            continue
+    #     ind = np.searchsorted(spectrum.spectral_axis.bin_edges[last_indice:].value, masked_pixel.value)
+    #     if ind + last_indice > len(spectrum.spectral_axis):
+    #         continue # If the mask goes outside the bin edges of the spectral axis, ignore
+    #     elif (ind + last_indice) == 0 and masked_pixel < spectrum.spectral_axis.bin_edges[0]:
+    #         continue
         
-        ind = ind + last_indice
-        new_flux[ind-1] = np.nan
-        new_uncertainty[ind-1] = np.nan
-        last_indice = ind
-        if ((spectrum.spectral_axis.bin_edges[ind-1].value > masked_pixel.value) or
-            (masked_pixel.value > spectrum.spectral_axis.bin_edges[ind].value) or
-            (spectrum.spectral_axis.bin_edges[ind-1].value > spectrum.spectral_axis[ind-1].value) or
-            (spectrum.spectral_axis.bin_edges[ind].value < spectrum.spectral_axis[ind-1].value)
-            ):
-            raise ValueError('There is an indice offset error. The condition that the masked pixel wavelength and the corresponding spectral_axis wavelength falls between the correct bin edges is not working.')
+    #     ind = ind + last_indice
+    #     new_flux[ind-1] = np.nan
+    #     new_uncertainty[ind-1] = np.nan
+    #     last_indice = ind
+    #     if ((spectrum.spectral_axis.bin_edges[ind-1].value > masked_pixel.value) or
+    #         (masked_pixel.value > spectrum.spectral_axis.bin_edges[ind].value) or
+    #         (spectrum.spectral_axis.bin_edges[ind-1].value > spectrum.spectral_axis[ind-1].value) or
+    #         (spectrum.spectral_axis.bin_edges[ind].value < spectrum.spectral_axis[ind-1].value)
+    #         ):
+    #         raise ValueError('There is an indice offset error. The condition that the masked pixel wavelength and the corresponding spectral_axis wavelength falls between the correct bin edges is not working.')
     
     new_mask_flux = np.isnan(new_flux)
     new_mask_err = np.isnan(new_uncertainty)
@@ -696,8 +698,29 @@ def _shift_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
             mask = new_mask,
             )
         logger.info('Finished correctly')
+    if sum(mask) != 0: 
+        masking_region = mask_shift(
+            new_x_axis,
+            mask
+        )
+        new_spectrum = exciser_fill_with_nan(new_spectrum, masking_region)
     
     return new_spectrum
+
+def mask_shift(new_x_axis, mask):
+    a,b = new_x_axis.bin_edges[:-1][mask], new_x_axis.bin_edges[1:][mask]
+    test_mask = a - np.roll(b, 1) == 0
+    left_regions, right_regions = a[~test_mask], np.roll(np.roll(b, 1)[~test_mask], -1)
+    
+    
+    for ind, (left, right) in enumerate(zip(left_regions, right_regions)):
+        if ind == 0:
+            masking_region = sp.SpectralRegion(left, right)
+        else:
+            masking_region += sp.SpectralRegion(left, right)
+            
+    return masking_region
+
 
 
 #%% interpolate2commonframe
@@ -1016,6 +1039,28 @@ def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                             quantile: float = .85,
                             polyfit: None | int = None,
                             window_size: int = 7500) -> sp.Spectrum1D | sp.SpectrumCollection:
+    """
+    Normalize a spectrum by either a quantile or polynomial fit.
+    
+    By default, quantile of 85% is used on window size of 7500 pixels
+    
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to normalize.
+    quantile : float, optional
+        Quantile to use as normalization factor, by default .85
+    polyfit : None | int, optional
+        Polynomial fit order to use, by default None. If None, quantile in window size is used instead.
+    window_size : int, optional
+        Window size for quantile normalization, by default 7500 pixels.
+
+    Returns
+    -------
+    normalized_spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Normalized spectrum
+    """
+    
     # DOCUMENTME
     match polyfit:
         case None:
@@ -1029,14 +1074,33 @@ def normalize_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
 
 def _normalize_spectrum_polyfit(spectrum,
                                 polynomial_order: int) -> sp.Spectrum1D | sp.SpectrumCollection:
-    # TODO
-    return
-
+    raise NotImplementedError()
+    
 def _normalize_spectrum_quantile(spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                                  quantile: float = .85,
                                  window_size: int = 7500) -> sp.Spectrum1D | sp.SpectrumCollection:
-    # DOCUMENTME
-    # FIXME
+    """
+    Normalize spectrum by a quantile in a rolling window of a given size.
+
+    Parameters
+    ----------
+    spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Spectrum to normalize.
+    quantile : float, optional
+        Quantile by which to normalize, by default .85. Value of .5 is for median normalization.
+    window_size : int, optional
+        Window size for the rolling window, by default 7500 pixels.
+
+    Returns
+    -------
+    normalized_spectrum : sp.Spectrum1D | sp.SpectrumCollection
+        Normalized spectrum.
+
+    Raises
+    ------
+    NotImplementedError
+        Spectral Collections are not implemented yet.
+    """
     if type(spectrum) == sp.SpectrumCollection:
         raise NotImplementedError
     old_flux = astropy.nddata.NDDataArray(data= spectrum.flux.value * u.dimensionless_unscaled,
@@ -1065,7 +1129,7 @@ def _normalize_spectrum_quantile(spectrum: sp.Spectrum1D | sp.SpectrumCollection
                 meta= spectrum.meta.copy(),
             )
         case sp.SpectrumCollection:
-            raise NotImplementedError
+            raise NotImplementedError('Spectral collection are not used.')
         
     new_spectrum.meta['normalization'] = True
     return new_spectrum
@@ -1310,6 +1374,50 @@ def calculate_master_list(spectrum_list: sp.SpectrumList,
         master_list.append(master_night)
 
     return master_list
+#%% wiggle correction
+def wiggle_correction(spectrum_list: sp.SpectrumList,
+                      binning_factor: int = 200) -> sp.SpectrumList:
+    """
+    Correction for wiggles in spectrum list by fitting a cubic spline to the spectrum with a given binning factor.
+    
+    The cubic spline is calculated for overbinned spectrum by binning factor.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to correct for wiggles
+    binning_factor : int, optional
+        Binning factor for overbinned spectrum, by default 200.
+
+    Returns
+    -------
+    new_spectrum_list : sp.SpectrumList
+        Spectrum list corrected for wiggles
+    """
+    
+    
+    new_spectrum_list = sp.SpectrumList()
+
+    for ind, item in enumerate(spectrum_list):
+        logger.info(f'Correcting for wiggles and renormalizing for spectrum {ind}/{len(spectrum_list)}')
+        
+        x,y,yerr = sm.binning_spectrum(item, 200)
+        
+        ind_mask_int = np.isfinite(y)
+        cs = CubicSpline(x[ind_mask_int], y[ind_mask_int], extrapolate=False)
+
+        interpolated_spectrum = sp.Spectrum1D(
+            spectral_axis = item.spectral_axis,
+            flux= (cs(item.spectral_axis.value))*u.dimensionless_unscaled,
+        )
+
+        new_spectrum = item.divide(interpolated_spectrum,
+                                    handle_meta='first_found'
+                                    )
+        new_spectrum_list.append(new_spectrum)
+    return new_spectrum_list
+
+
 
 #%% spec_list_master_correct
 @progress_tracker
@@ -1625,7 +1733,9 @@ def shift_list(spectrum_list:sp.SpectrumList,
         logger.warning('Finished multiprocessing')
     else:
         new_spectrum_list = sp.SpectrumList()
-        for spectrum in spectrum_list:
+        for ind, spectrum in enumerate(spectrum_list):
+            logger.info(f'Shifting spectrum number: {ind}/{len(spectrum_list)}')
+            
             new_spectrum_list.append(
                 shift_spectrum_multiprocessing(spectrum,shift_BERV,
                                 shift_v_sys,
@@ -1660,6 +1770,9 @@ def sort_spectrum_list(spectrum_list:sp.SpectrumList,
     sorted_spectrum_list = sp.SpectrumList()
     for new_index, spectrum_index in enumerate(ind):
         sorted_spectrum_list.append(spectrum_list[spectrum_index])
+        
+    for ind, item in enumerate(sorted_spectrum_list):
+        item.meta['Spec_num'] = ind + 1
     return sorted_spectrum_list
 #%% extract_average_uncertainty_from_region
 def extract_average_uncertainty_from_region(spec,line_list,diff_unc=1*u.AA):
@@ -1835,3 +1948,56 @@ def RM_simulation(spec_list,master_RF_star_oot,sys_para):
     # Calculate master in transit
     In_transit = smcalc._calculate_master(RM_simulated,sn_type = 'quadratic_combined')
     return RM_simulated,In_transit
+#%% Injection of planetary signal
+def inject_planetary_signal(spectrum_list: sp.SpectrumList,
+                            template: sp.Spectrum1D,
+                            offset: u.Quantity = -100*u.km/u.s
+                            ) -> sp.SpectrumList:
+    """
+    Injects a planetary signal inside a spectrum list. 
+    
+    The spectrum list should be within the barycenter rest frame.
+
+    Parameters
+    ----------
+    spectrum_list : sp.SpectrumList
+        Spectrum list to inject signal in
+    template : sp.Spectrum1D
+        Template to use as a injecting signal. This template will be shifted for each in transit spectrum by planet and system velocity.
+    offset : u.Quantity, optional
+        Offset where to inject the signal, by default -100*u.km/u.s
+
+    Returns
+    -------
+    new_spectrum_list : sp.SpectrumList
+        Spectrum list with injected signal
+    """
+    new_spectrum_list = sp.SpectrumList()
+    
+    for item in spectrum_list:
+        if item.meta['Transit_partial']:
+            shifted_template = _shift_spectrum(
+                spectrum= template,
+                velocities= extract_velocity_field(
+                    item,
+                    shift_BERV = 0,
+                    shift_v_sys = 1,
+                    shift_v_star = 0,
+                    shift_v_planet = 1,
+                    shift_constant = offset,
+                )
+            )
+            
+            new_spectrum_list.append(
+                sp.Spectrum1D(
+                    spectral_axis = item.spectral_axis,
+                    flux = (item.flux.value - shifted_template.flux.value) * item.flux.unit,
+                    uncertainty= item.uncertainty,
+                    meta = item.meta,
+                    mask = np.isnan(item.flux.value)
+                    )
+            )
+        else:
+            new_spectrum_list.append(item)
+    
+    return new_spectrum_list

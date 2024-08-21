@@ -241,7 +241,7 @@ def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
     rv_step = main_header['HIERARCH ESO RV STEP']
     
     flux_total = fits_hdulist['SCIDATA'].data[-1] * u.ct
-    rv_range = np.linspace(rv_start, rv_step, len(flux_total))
+    rv_range = np.arange(rv_start, rv_start+ rv_step*len(flux_total), rv_step )
     error_total = astropy.nddata.StdDevUncertainty(fits_hdulist['ERRDATA'].data[-1])
     
     meta = _basic_meta_parameters()

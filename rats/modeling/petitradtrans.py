@@ -223,7 +223,7 @@ def _calculate_transmission_model(atmosphere: prt.Radtrans,
                                                                    planet_radius=planet_radius,
                                                                    reference_pressure=reference_pressure)
     wavelengths_air = ((_vactoair((wavelengths*u.cm).to(u.nm).value))*u.nm).to(u.cm).value
-    flux_interpolation = scipy.interpolate.CubicSpline(wavelengths_air, transit_radii)
+    flux_interpolation = scipy.interpolate.CubicSpline(wavelengths_air, transit_radii, extrapolate=False)
     interpolated_transit_depth = flux_interpolation(spectral_axis.to(u.cm).value)
     
     return wavelengths_air, transit_radii, interpolated_transit_depth
@@ -249,11 +249,15 @@ def _remove_continuum(spectral_axis: sp.SpectralAxis,
         Template flux without the continuum.
     """
     
+    ind = np.isfinite(flux)
+    flux_fitting = flux[ind]
+    spectral_axis_fitting = spectral_axis[ind]
+    
     from astropy.modeling import models, fitting
     fit = fitting.LinearLSQFitter()
     line_init = models.Polynomial1D(6)
     
-    fitted_line = fit(line_init, spectral_axis, flux)
+    fitted_line = fit(line_init, spectral_axis_fitting, flux_fitting)
     
     # Get a mask where the line and fitted model align within 1 %
     mask = np.where(abs((flux- fitted_line(spectral_axis))/ flux) < 0.05)
@@ -391,7 +395,7 @@ def create_templates(spectral_axis: sp.SpectralAxis,
                     exist_ok = True
                     )
         # Try load the template
-        filename = save_directory+f'pressure_{str(reference_pressure)}_abund_{str(abundance)}'
+        filename = save_directory+f'pressure_{str(reference_pressure)}_abund_{str(abundance)}.pkl'
         if not(force_recalculate):
             try:
                 with open(filename, 'rb') as input_file:

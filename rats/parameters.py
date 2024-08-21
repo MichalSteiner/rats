@@ -22,6 +22,8 @@ from html import unescape
 from rats.utilities import default_logger_format
 from dataclasses import dataclass
 import pandas as pd
+import latextable
+import texttable
 import logging
 #%% Setting up logging
 logger = logging.getLogger(__name__)
@@ -262,6 +264,24 @@ def _print_NDDataArray(Array: NDDataArray):
     else:
         logger.print(f'{Array.meta["parameter"]}: {Array.data} ± {Array.uncertainty.array} [{unit}] | {reference}')
     return
+
+def _print_to_Latextable_NDDataArray(Array: NDDataArray):
+    if Array.meta["reference"]:
+        reference = _extract_reference(Array.meta["reference"])
+    else:
+        reference = ''
+    if Array.unit is None:
+        unit = ''
+    else:
+        unit = f'{Array.unit:latex_inline}'
+    
+    row = [
+        str(Array.meta["parameter"]),
+        (str(f"{Array.data}") + ' ' + str(f'$\pm {Array.uncertainty.array}$') + ' ' + str(Array.unit)),
+        str(reference)
+        ]
+    return row
+    
 #%% Magnitudes class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _Magnitudes():
@@ -454,9 +474,38 @@ class _StellarParameters(parautils.StellarModel,
         
         return
     
-    def create_latex_table(self):
-        # TODO
-        return
+    def create_latex_table(self,
+                           standalone:bool = True,
+                           parameter_list:None | list = None) -> list:
+        
+        if standalone:
+            Stellar_table = texttable.Texttable()
+            stellar_table_rows = ["Parameter", "Value", "Reference"]
+        else:
+            stellar_table_rows = []
+        if parameter_list is None:
+            parameter_list = [self.temperature,
+                              self.radius,
+                              self.mass,
+                              self.age,
+                              self.vsini,
+                              ]
+        
+        for parameter in parameter_list:
+            stellar_table_rows.append(
+                _print_to_Latextable_NDDataArray(parameter)
+            )
+            
+        if standalone:
+            Stellar_table.add_rows(stellar_table_rows)
+            print(latextable.draw_latex(Stellar_table,
+                                        caption="Stellar parameters used in this work.",
+                                        label="tab:stellar_parameters",
+                                        use_booktabs=True)
+                  )
+        
+        return stellar_table_rows
+        
 #%% Planet parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _PlanetParameters(parautils.CalculationPlanet):
@@ -619,11 +668,43 @@ class _PlanetParameters(parautils.CalculationPlanet):
             _print_NDDataArray(array)
         
         return
-    def create_latex_table(self):
-        # TODO
-        return
+    def create_latex_table(self,
+                           standalone: bool = True,
+                           parameter_list: None | list = None) -> list:
+        if standalone:
+            Planet_table = texttable.Texttable()
+            planet_table_rows = ["Parameter", "Value", "Reference"]
+        else:
+            planet_table_rows = []
+        if parameter_list is None:
+            parameter_list = [
+                self.radius,
+                self.mass,
+                self.density,
+                self.semimajor_axis,
+                self.eccentricity,
+                self.equilibrium_temperature,
+                self.insolation_flux,
+                self.projected_obliquity,
+                self.true_obliquity
+                ]
+        
+        for parameter in parameter_list:
+            planet_table_rows.append(
+                _print_to_Latextable_NDDataArray(parameter)
+                
+            )
+            
+        if standalone:
+            Planet_table.add_rows(planet_table_rows)
+            print(latextable.draw_latex(Planet_table,
+                                        caption="Planet parameters used in this work.",
+                                        label="tab:planet_parameters",
+                                        use_booktabs=True)
+                  )
+        
+        return planet_table_rows
     
-    pass
 #%% System parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class _SystemParameters():
@@ -664,17 +745,13 @@ class _SystemParameters():
         CompositeTableRow : pd.DataFrame
             Row for given system taken from NASA Composite table
         """
-        
-        
         self.systemic_velocity = _load_array_from_CompositeTable(CompositeTableRow, 'st_radv', 'Systemic velocity')
         self.systemic_velocity.unit = u.km / u.s
         self.distance = _load_array_from_CompositeTable(CompositeTableRow, 'sy_dist', 'Distance to the system')
         self.distance.unit = u.pc
-        
         self.number_of_stars = _load_array_from_CompositeTable(CompositeTableRow, 'sy_snum', 'Number of stars')
         self.number_of_planets = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pnum', 'Number of planets')
         self.number_of_moons = _load_array_from_CompositeTable(CompositeTableRow, 'sy_mnum', 'Number of moons')
-        
         self.total_proper_motion = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pm', 'Total proper motion')
         self.total_proper_motion.unit = u.mas / u.year
         self.proper_motion_right_ascension = _load_array_from_CompositeTable(CompositeTableRow, 'sy_pmra', 'Proper motion in right ascension')
@@ -695,7 +772,36 @@ class _SystemParameters():
         self.ecliptic_latitude.unit = u.deg
         self.ecliptic_longitude = _load_array_from_CompositeTable(CompositeTableRow, 'elon', 'Ecliptic longitude')
         self.ecliptic_longitude.unit = u.deg
-
+    
+    def create_latex_table(self,
+                           standalone: bool = True,
+                           parameter_list: None | list = None) -> list:
+        if standalone:
+            System_table = texttable.Texttable()
+            system_table_rows = ["Parameter", "Value", "Reference"]
+        else:
+            system_table_rows = []
+        if parameter_list is None:
+            parameter_list = [
+                self.systemic_velocity,
+                self.distance,
+                ]
+        
+        for parameter in parameter_list:
+            system_table_rows.append(
+                _print_to_Latextable_NDDataArray(parameter)
+                
+            )
+            
+        if standalone:
+            System_table.add_rows(system_table_rows)
+            print(latextable.draw_latex(System_table,
+                                        caption="System parameters used in this work.",
+                                        label="tab:system_parameters",
+                                        use_booktabs=True)
+                  )
+        
+        return system_table_rows
 
 #%% Ephemeris parameters class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
@@ -854,9 +960,37 @@ class _EphemerisParameters():
         return
     
     
-    def create_latex_table(self):
-        # TODO
-        return
+    def create_latex_table(self,
+                           standalone: bool = True,
+                           parameter_list: None | list = None):
+        if standalone:
+            Ephemeris_table = texttable.Texttable()
+            ephemeris_table_rows = ["Parameter", "Value", "Reference"]
+        else:
+            ephemeris_table_rows = []
+        if parameter_list is None:
+            parameter_list = [
+                self.transit_center,
+                self.period,
+                self.transit_length_partial,
+                self.transit_depth
+                ]
+        
+        for parameter in parameter_list:
+            ephemeris_table_rows.append(
+                _print_to_Latextable_NDDataArray(parameter)
+                
+            )
+            
+        if standalone:
+            Ephemeris_table.add_rows(ephemeris_table_rows)
+            print(latextable.draw_latex(Ephemeris_table,
+                                        caption="Ephemeris parameters used in this work.",
+                                        label="tab:ephemeris_parameters",
+                                        use_booktabs=True)
+                  )
+        
+        return ephemeris_table_rows
 
 #%% System parameters Composite class
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
@@ -998,6 +1132,31 @@ class SystemParametersComposite(parautils.CalculationTransitLength,
         logger.print('='*25)
         return
     
+    def create_latex_table(self
+                           ):
+        SystemTable = texttable.Texttable()
+        System_table_rows = [["Parameter", "Value", "Reference"]]
+        System_table_rows.extend(
+            self.Star.create_latex_table(standalone=False)
+        )
+        System_table_rows.extend(
+            self.System.create_latex_table(standalone=False)
+        )
+        System_table_rows.extend(
+            self.Planet.create_latex_table(standalone=False)
+        )
+        System_table_rows.extend(
+            self.Ephemeris.create_latex_table(standalone=False)
+        )
+            
+        SystemTable.add_rows(System_table_rows)
+        print(latextable.draw_latex(SystemTable,
+                                    caption="System parameters used in this work.",
+                                    label="tab:system_parameters",
+                                    use_booktabs=True)
+                    )
+        
+        return
     
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False)
 class SystemParametersFull():
