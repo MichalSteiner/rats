@@ -6,6 +6,7 @@ import numpy as np
 import seaborn as sns
 import rats.spectra_manipulation as sm
 import arviz as az
+import astropy.units as u
 #%% Plotting RV plot during transit
 def plot_RV(spectrum_list: sp.SpectrumList):
     """
@@ -70,8 +71,6 @@ def _plot_posterior(data_chain: list,
             )
     
     
-    
-    
     for ind, test_chain in enumerate(data_chain):
         match type:
             case 'rvcenter':
@@ -116,9 +115,9 @@ def plot_posterior_local_CCF(all_data_chain:list,
 
     # Create a 10xn grid based on number of total spectra
     if divmod(len(all_data_chain), 10)[1] != 0:
-        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0]+1,10, sharex=False, sharey=False,figsize=fig_size)
+        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0]+1,10, sharex=False, sharey=False,figsize=fig_size, squeeze=False)
     else:
-        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0],10, sharex=False, sharey=False,figsize=fig_size)
+        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0],10, sharex=False, sharey=False,figsize=fig_size, squeeze=False)
     
     for ind, test_chain in enumerate(all_data_chain):
         az.plot_dist(
@@ -138,9 +137,9 @@ def plot_posterior_local_CCF(all_data_chain:list,
     fig.savefig('./figures/whitemode_normal/posterior_rvcenter.pdf')
     
     if divmod(len(all_data_chain), 10)[1] != 0:
-        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0]+1,10, sharex=False, sharey=False,figsize=fig_size)
+        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0]+1,10, sharex=False, sharey=False,figsize=fig_size, squeeze=False)
     else:
-        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0],10, sharex=False, sharey=False,figsize=fig_size)
+        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0],10, sharex=False, sharey=False,figsize=fig_size, squeeze=False)
     
     for ind, test_chain in enumerate(all_data_chain):
         az.plot_dist(test_chain.posterior.contrast,
@@ -158,9 +157,9 @@ def plot_posterior_local_CCF(all_data_chain:list,
     fig.savefig('./figures/whitemode_normal/posterior_contrast.pdf')
     
     if divmod(len(all_data_chain), 10)[1] != 0:
-        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0]+1,10, sharex=False, sharey=False,figsize=fig_size)
+        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0]+1,10, sharex=False, sharey=False,figsize=fig_size, squeeze=False)
     else:
-        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0],10, sharex=False, sharey=False,figsize=fig_size)
+        fig, axs = plt.subplots(divmod(len(all_data_chain),10)[0],10, sharex=False, sharey=False,figsize=fig_size, squeeze=False)
     for ind, test_chain in enumerate(all_data_chain):
         az.plot_dist(test_chain.posterior.fwhm,
                      ax=axs[divmod(ind,10)],
@@ -175,4 +174,99 @@ def plot_posterior_local_CCF(all_data_chain:list,
     fig.supxlabel('Full-Width Half Maximum [km/s]')
     fig.tight_layout()
     fig.subplots_adjust(wspace=0, hspace=0)
+    fig.savefig('./figures/whitemode_normal/posterior_fwhm.pdf')
+    
+#%%
+def plot_Gaussian_values(data_chain_list: list,
+                         CCF_intrinsic: sp.SpectrumList,
+                         system_parameters):
+    in_transit = [CCF for CCF in CCF_intrinsic if CCF.meta['Transit_partial']]
+    import arviz as az
+    colors = sns.color_palette('dark')
+    
+    fig, axs = plt.subplots(3,2)
+    for CCF, data_chain in zip(in_transit, data_chain_list):
+        if CCF.meta['Spec_num'] in [6, 22, 48, 49, 62, 78]:
+            continue
+        
+        contrast_error = np.asarray([
+            (data_chain.posterior.contrast.median().to_numpy() - az.hdi(data_chain.posterior.contrast, hdi_prob=0.683)['contrast'].to_numpy())[0],
+            (- data_chain.posterior.contrast.median().to_numpy() + az.hdi(data_chain.posterior.contrast, hdi_prob=0.683)['contrast'].to_numpy())[1]
+            ]).reshape(2,1)
+        fwhm_error = np.asarray([
+            (data_chain.posterior.fwhm.median().to_numpy() - az.hdi(data_chain.posterior.fwhm, hdi_prob=0.683)['fwhm'].to_numpy())[0],
+            (- data_chain.posterior.fwhm.median().to_numpy() + az.hdi(data_chain.posterior.fwhm, hdi_prob=0.683)['fwhm'].to_numpy())[1]
+            ]).reshape(2,1)
+        
+        rvcenter_error = np.asarray([
+            (data_chain.posterior.rvcenter.median().to_numpy() - az.hdi(data_chain.posterior.rvcenter, hdi_prob=0.683)['rvcenter'].to_numpy())[0],
+            (- data_chain.posterior.rvcenter.median().to_numpy() + az.hdi(data_chain.posterior.rvcenter, hdi_prob=0.683)['rvcenter'].to_numpy())[1]
+            ]).reshape(2,1)
+        
+        axs[0,0].errorbar(CCF.meta['Phase'].data,
+                        data_chain.posterior.contrast.median().to_numpy(),
+                        contrast_error,
+                        color= colors[CCF.meta['Night_num']-1], fmt='.')
+        
+        axs[1,0].errorbar(CCF.meta['Phase'].data,
+                        data_chain.posterior.fwhm.median().to_numpy(),
+                        fwhm_error,
+                        color= colors[CCF.meta['Night_num']-1], fmt='.'
+                        )
+        
+        axs[2,0].errorbar(CCF.meta['Phase'].data,
+                        data_chain.posterior.rvcenter.median().to_numpy(),
+                        rvcenter_error,
+                        color= colors[CCF.meta['Night_num']-1], fmt='.'
+                        )
+        
+        # FIXME
+        # This is probably wrong formula, Whops! Also, move this to a meta keyword instead
+        mu = abs(system_parameters.Planet.a_rs_ratio * np.sin(2*np.pi * CCF.meta['Phase'].data))
+        
+        
+        axs[0,1].errorbar(mu,
+                        data_chain.posterior.contrast.median().to_numpy(),
+                        contrast_error,
+                        color= colors[CCF.meta['Night_num']-1], fmt='.')
+        
+        axs[1,1].errorbar(mu,
+                        data_chain.posterior.fwhm.median().to_numpy(),
+                        fwhm_error,
+                        color= colors[CCF.meta['Night_num']-1], fmt='.'
+                        )
+        axs[2,1].errorbar(mu,
+                        data_chain.posterior.rvcenter.median().to_numpy(),
+                        rvcenter_error,
+                        color= colors[CCF.meta['Night_num']-1], fmt='.'
+                        )
+        
+    phase_model = np.linspace(axs[0,0].get_xlim()[0],
+                             axs[0,0].get_xlim()[1],
+                             1000)
+    import astropy
+    system_parameters.Planet.projected_obliquity = astropy.nddata.NDDataArray(
+        -0.26 * u.deg,
+        uncertainty= astropy.nddata.StdDevUncertainty(0.31)
+    )
+    # system_parameters.Star.vsini = astropy.nddata.NDDataArray(
+    #     7.4 * u.deg,
+    #     uncertainty= astropy.nddata.StdDevUncertainty(0.1)
+    # )
+    rv_loc = []
+    for phase in phase_model:
+        rv_loc.append(system_parameters._local_stellar_velocity(phase)) 
+    rv_loc_value = np.asarray([rv.data for rv in rv_loc])
+    rv_loc_error = np.asarray([rv.uncertainty.array for rv in rv_loc])
+    
+    axs[2,0].plot(phase_model, rv_loc_value, color='black')
+    axs[2,0].fill_between(phase_model, rv_loc_value-rv_loc_error, rv_loc_value+rv_loc_error, color='red', alpha=0.2)
+    
+    
+    
+    axs[0,0].set_ylabel('Contrast [unitless]')
+    axs[1,0].set_ylabel('FWHM [km/s]')
+    axs[2,0].set_ylabel('RV center [km/s]')
+    axs[2,0].set_xlabel('Phase')
+    axs[2,1].set_xlabel('$\mu$ CHECK FORMULA')
     fig.savefig('./figures/whitemode_normal/posterior_fwhm.pdf')

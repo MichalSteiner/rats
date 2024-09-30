@@ -198,7 +198,29 @@ class CalculationSystem:
         )
         
         return stellar_velocity
-    @time_function
+    
+    def _local_stellar_velocity(self,
+                                phase: float | NDDataArray):
+        
+        if type(phase) != NDDataArray:
+            phase = NDDataArray(phase,
+                                uncertainty= StdDevUncertainty(0)
+                                )
+        
+        return (self.Planet.semimajor_axis.divide(self.Star.radius).convert_unit_to(u.dimensionless_unscaled)).multiply(
+            (
+                (ndutils._sin_NDDataArray(phase.multiply(2*np.pi*u.rad))).multiply(
+                    ndutils._cos_NDDataArray(self.Planet.projected_obliquity)
+                    ).add(
+                ndutils._cos_NDDataArray(phase.multiply(2*np.pi*u.rad)).multiply(
+                    ndutils._cos_NDDataArray(self.Planet.inclination)).multiply(
+                        ndutils._sin_NDDataArray(self.Planet.projected_obliquity))
+                    )
+                    ).multiply(
+                        self.Star.vsini
+                    )
+            )
+    
     def calculate_local_stellar_velocity(self,
                                           spectrum_list: sp.SpectrumList):
         """

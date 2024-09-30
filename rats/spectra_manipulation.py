@@ -1401,7 +1401,7 @@ def wiggle_correction(spectrum_list: sp.SpectrumList,
     for ind, item in enumerate(spectrum_list):
         logger.info(f'Correcting for wiggles and renormalizing for spectrum {ind}/{len(spectrum_list)}')
         
-        x,y,yerr = sm.binning_spectrum(item, 200)
+        x,y,yerr = binning_spectrum(item, 200)
         
         ind_mask_int = np.isfinite(y)
         cs = CubicSpline(x[ind_mask_int], y[ind_mask_int], extrapolate=False)
@@ -1773,6 +1773,8 @@ def sort_spectrum_list(spectrum_list:sp.SpectrumList,
         
     for ind, item in enumerate(sorted_spectrum_list):
         item.meta['Spec_num'] = ind + 1
+        
+    
     return sorted_spectrum_list
 #%% extract_average_uncertainty_from_region
 def extract_average_uncertainty_from_region(spec,line_list,diff_unc=1*u.AA):
@@ -1981,17 +1983,17 @@ def inject_planetary_signal(spectrum_list: sp.SpectrumList,
                 velocities= extract_velocity_field(
                     item,
                     shift_BERV = 0,
-                    shift_v_sys = 1,
+                    shift_v_sys = -1,
                     shift_v_star = 0,
-                    shift_v_planet = 1,
-                    shift_constant = offset,
+                    shift_v_planet = -1,
+                    shift_constant = -offset,
                 )
             )
             
             new_spectrum_list.append(
                 sp.Spectrum1D(
                     spectral_axis = item.spectral_axis,
-                    flux = (item.flux.value - shifted_template.flux.value) * item.flux.unit,
+                    flux = (item.flux.value * shifted_template.flux.value) * item.flux.unit,
                     uncertainty= item.uncertainty,
                     meta = item.meta,
                     mask = np.isnan(item.flux.value)

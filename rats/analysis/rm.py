@@ -33,7 +33,9 @@ def _fit_gaussian_profile(CCF: sp.Spectrum1D) -> astropy.modeling.core.CompoundM
         stddev=5 *u.km/u.s) + astropy.modeling.models.Const1D(
             amplitude=np.nanmedian(CCF.flux)
             )
-        
+    if abs(Gaussian_model.mean_0.value) < 1E-4:
+        Gaussian_model.mean_0.value = 1E-4
+    
     gaussian_fitter = astropy.modeling.fitting.LevMarLSQFitter(calc_uncertainties=True)
     
     finite_indices = np.isfinite(CCF.flux)
@@ -103,15 +105,58 @@ def normalize_CCF_list(CCF_list: sp.SpectrumList,
     )
     return CCF_list_normalized
 
-def _remove_systemic_velocity(data: sp.SpectrumList,
-                              system_parameters) -> sp.SpectrumList:
+
+def calculate_systemic_velocity(master_SRF_out: sp.SpectrumList,
+                                data_SRF: sp.SpectrumList | None = None):
+    """
+    Calculates systemic velocity from the master out spectrum.
+
+    Parameters
+    ----------
+    master_SRF_out : sp.SpectrumList
+        Master out spectra in rest frame of the star
+    data_SRF : sp.SpectrumList | None
+        Spectrum list to input the systemic velocity in. If None, this part of the function is ignored. 
+    """
+
+    logger.print('Calculating systemic velocity:')
+    logger.print('='*50)
+    for ind, night in enumerate(master_SRF_out):
+        results, uncertainty = _fit_gaussian_profile(night)
+        logger.print(f'Systemic velocity for night {night.meta["night"]}: {results.mean_0.value} {results.mean_0.unit} ± {uncertainty[1]}')
+        
+        if data_SRF is None:
+            continue
+        for item in data_SRF:
+            if item.meta['Night'] == night.meta['night']:
+                item.meta['velocity_system'] = astropy.nddata.NDDataArray(results.mean_0.value, unit = results.mean_0.unit)
+
+
+def _remove_systemic_velocity(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
+    """
+    Removes systemic velocity from the data.
+    
+    This needs to be a separate function from shift spectrum, as CCF's are often defined on too narrow region. 
+    In particular, the spectral axis changes in this function, unlike the shift_spectrum function.
+    The algorithm is just literal subtraction of the "velocity_system" keyword from the meta of each spectrum in data.
+
+    Parameters
+    ----------
+    data : sp.SpectrumList
+        Data from which to remove systemic velocity
+
+    Returns
+    -------
+    new_spectrum_list : sp.SpectrumList
+        Shifted spectrum list without the systemic velocity
+    """
     
     new_spectrum_list = sp.SpectrumList()
     
-    for spectrum in data:
+    for spectrum in spectrum_list:
         new_spectrum_list.append(
             sp.Spectrum1D(
-                spectral_axis= spectrum.spectral_axis -system_parameters.System.systemic_velocity.data*system_parameters.System.systemic_velocity.unit,
+                spectral_axis= spectrum.spectral_axis - (spectrum.meta['velocity_system'].data * spectrum.meta['velocity_system'].unit),
                 flux= spectrum.flux,
                 uncertainty= spectrum.uncertainty,
                 meta= spectrum.meta,
@@ -144,7 +189,7 @@ def subtract_master_out(CCF_list: sp.SpectrumList,
     CCF_residual = sp.SpectrumList(
         [
             CCF.subtract(
-                master_out_list[CCF.meta['Night_num']],
+                master_out_list[int(np.argwhere(np.asarray([test.meta['num_night'] for test in master_out_list]) == str(CCF.meta['Night_num'])).flatten())],
                 handle_meta='first_found'
                 ).multiply(
                     -1*u.dimensionless_unscaled,
@@ -158,7 +203,7 @@ def subtract_master_out(CCF_list: sp.SpectrumList,
         if CCF.meta['delta'] != 0:
             CCF_intrinsic.append(
                 CCF.subtract(
-                    master_out_list[CCF.meta['Night_num']],
+                master_out_list[int(np.argwhere(np.asarray([test.meta['num_night'] for test in master_out_list]) == str(CCF.meta['Night_num'])).flatten())],
                     handle_meta='first_found'
                     ).multiply(
                         -1*u.dimensionless_unscaled,
@@ -171,7 +216,7 @@ def subtract_master_out(CCF_list: sp.SpectrumList,
         else:
             CCF_intrinsic.append(
                 CCF.subtract(
-                    master_out_list[CCF.meta['Night_num']],
+                master_out_list[int(np.argwhere(np.asarray([test.meta['num_night'] for test in master_out_list]) == str(CCF.meta['Night_num'])).flatten())],
                     handle_meta='first_found'
                     ).multiply(
                         -1*u.dimensionless_unscaled,
@@ -199,7 +244,7 @@ def _MCMC_model_local_CCF(CCF_local: sp.Spectrum1D,
     
     lower_bound = CCF_local.spectral_axis[0].value
     upper_bound = CCF_local.spectral_axis[-1].value
-    spread_CCF = (upper_bound - lower_bound)/2
+    spread_CCF = (upper_bound - lower_bound)
     
     local_CCF_model = pm.Model()
     with local_CCF_model:
@@ -220,7 +265,7 @@ def _MCMC_model_local_CCF(CCF_local: sp.Spectrum1D,
         
         # Expecting a Gaussian profile
         expected = (-contrast *
-                    np.exp(-((CCF_local.spectral_axis[ind].value-rvcenter)**2)/(2*((fwhm/2.35482)**2))) + 1) # fwhm to sigma is approx fwhm = 2.35482*sigma
+                    pm.math.exp(-((CCF_local.spectral_axis[ind].value-rvcenter)**2)/(2*((fwhm/2.35482)**2))) + 1) # fwhm to sigma is approx fwhm = 2.35482*sigma
         
         # Observed, expecting Gaussian, sigma = uncertainty, observed = flux
         observed = pm.Normal("observed",
@@ -241,9 +286,13 @@ def _MCMC_model_local_CCF(CCF_local: sp.Spectrum1D,
 @save_and_load
 def MCMC_model_local_CCF_list(
     CCF_list: sp.SpectrumList,
+    draws: int = 15000,
+    tune: int = 15000,
+    chains: int = 15,
     force_load: bool = True,
     force_skip: bool = False,
-    pkl_name: str = 'distribution_local_CCF.pkl') -> list:
+    pkl_name: str = 'distribution_local_CCF.pkl',
+    **kwargs_pymc) -> list:
     """
     Calculates the posterior distribution of intrinsic CCF by MCMC routine and fitting a Gaussian profile.
 
@@ -269,9 +318,129 @@ def MCMC_model_local_CCF_list(
     for CCF_local in CCF_list:
         if not(CCF_local.meta['Transit_partial']):
             continue
-        data_chain.append(_MCMC_model_local_CCF(CCF_local))
+        data_chain.append(_MCMC_model_local_CCF(
+            CCF_local,
+            draws= draws,
+            tune= tune,
+            chains= chains,
+            **kwargs_pymc,
+            )
+            )
     
     return data_chain
+#%% Revolutions MCMC
+@save_and_load
+def MCMC_model_Revolutions(system_parameters,
+                           CCF_intrinsic_list: sp.SpectrumList,
+                           contrast_order: int = 0,
+                           fwhm_order: int = 0,
+                           contrast_phase: str = 'Phase',
+                           fwhm_phase: str = 'Phase',
+                           draws: int = 15000,
+                           tune: int = 15000,
+                           force_skip: bool = False,
+                           force_load: bool = True,
+                           pkl_name: str = ''
+                           ):
+    basic_model = pm.Model()
+    
+    wavelength = np.asarray([CCF.spectral_axis.value for CCF in CCF_intrinsic_list if CCF.meta['Transit_partial']])
+    flux = np.asarray([CCF.flux.value for CCF in CCF_intrinsic_list if CCF.meta['Transit_partial']])
+    uncertainty = np.asarray([CCF.uncertainty.array for CCF in CCF_intrinsic_list if CCF.meta['Transit_partial']])
+    phase = np.asarray([[CCF.meta['Phase'].data]*len(CCF.spectral_axis) for CCF in CCF_intrinsic_list if CCF.meta['Transit_partial']])
+    
+    
+    if contrast_phase != 'Phase' or fwhm_phase != 'Phase':
+        raise NotImplementedError
+    
+    ind = np.logical_and(
+        np.isfinite(flux),
+        np.isfinite(uncertainty)
+        )
+    
+    wavelength = wavelength[ind]
+    flux = flux[ind]
+    uncertainty = uncertainty[ind]
+    phase = phase[ind]
+    
+    lower_bound = CCF_intrinsic_list[0].spectral_axis[0].value
+    upper_bound = CCF_intrinsic_list[0].spectral_axis[-1].value
+    spread_CCF = (upper_bound - lower_bound)/2
+    
+    aRs = (system_parameters.Planet.semimajor_axis.divide(system_parameters.Star.radius)).convert_unit_to(u.dimensionless_unscaled).data
+        
+    with basic_model:
+        obliquity = pm.Uniform('obliquity',
+                               lower=-180,
+                               upper=180
+                               )
+        
+        # veqsini = pm.Uniform('veqsini',
+        #                      lower= 0,
+        #                      upper= spread_CCF
+        #                      )
+        
+        veqsini = pm.TruncatedNormal('veqsini',
+                        mu= 7.5,
+                        sigma= 0.7,
+                        lower=0
+                        )
+        
+        contrast = pm.Uniform('contrast',
+                              lower=0,
+                              upper=1,
+                              shape= contrast_order + 1
+                              )
+        
+        fwhm = pm.Uniform('fwhm',
+                    lower= 0,
+                    upper= spread_CCF,
+                    shape= fwhm_order + 1
+                    )
+        
+        x_p = aRs * pm.math.sin(2*np.pi * phase)
+        y_p = aRs * pm.math.cos(2*np.pi * phase) * pm.math.cos(system_parameters.Planet.inclination.data / 180*np.pi)
+        
+        x_perpendicular = x_p* pm.math.cos(obliquity/180*np.pi) - y_p * pm.math.sin(obliquity/180*np.pi)
+        y_perpendicular = x_p * pm.math.sin(obliquity/180*np.pi) - y_p * pm.math.cos(obliquity/180*np.pi)
+        
+        local_stellar_velocity = x_perpendicular * veqsini
+        
+        contrast_polynomial = 0
+        fwhm_polynomial = 0
+        
+        for ind in range(contrast_order+1):
+            contrast_polynomial = contrast_polynomial + contrast[ind] * wavelength**(ind)
+        for ind in range(fwhm_order+1):
+            fwhm_polynomial = fwhm_polynomial + fwhm[ind] * wavelength**(ind)
+        
+        # Expecting a Gaussian profile
+        expected = (    
+            -contrast_polynomial * pm.math.exp(-(
+                (wavelength - local_stellar_velocity)**2
+                )/
+                               (2*((fwhm_polynomial/2.35482)**2))
+                               ) + 1
+            ) # fwhm to sigma is approx fwhm = 2.35482*sigma
+        
+        # Observed, expecting Gaussian, sigma = uncertainty, observed = flux
+        observed = pm.Normal("observed",
+                             mu=expected,
+                             sigma= uncertainty,
+                             observed=flux
+                             )
+        
+        idata = pm.sample(
+            draws= draws,
+            tune= tune,
+            chains= 30,
+            target_accept=0.99
+        )
+    
+    logger.info("Hello there!")
+    return idata
+
+
 
 
 def wrapper_RM_Revolutions(data_raw_A: sp.SpectrumList):

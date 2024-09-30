@@ -300,7 +300,6 @@ def create_template(spectral_axis: sp.SpectralAxis,
         Template spectrum of given species.
     """
     
-    
     atmosphere = _define_atmosphere_model(
         pressures=pressures,
         line_species= line_species,
@@ -308,6 +307,21 @@ def create_template(spectral_axis: sp.SpectralAxis,
         rayleigh_species=['H2', 'He'],
         gas_continuum_contributors = ['H2-H2', 'H2-He']
     )
+    
+    
+    if type(spectral_axis) == sp.SpectralAxis:
+        wavelength_boundaries = _get_edges_wavelength(spectral_axis)
+    
+    # atmosphere = prt.Radtrans(
+    #     pressures=pressures,
+    #     line_species=line_species,
+    #     rayleigh_species= ['H2', 'He'],
+    #     gas_continuum_contributors= ['H2-H2', 'H2-He', 'H-'],
+    #     line_opacity_mode = 'lbl',
+    #     wavelength_boundaries= wavelength_boundaries,
+    #     cloud_species = ['H2O-NatAbund(s)_crystalline_194__DHS.R39_0.1-250mu'],
+    # )
+    
     
     temperatures = _T_P_profile_guillot(
         SystemParameters,
@@ -331,6 +345,12 @@ def create_template(spectral_axis: sp.SpectralAxis,
         SystemParameters= SystemParameters,
         reference_pressure= reference_pressure
     )
+    
+    # mpl.use('TkAgg')
+    # fig,ax = plt.subplots(1)
+    # ax.plot(wavelengths, transit_radii)
+    
+    
     
     transit_radii = (transit_radii*u.cm).to(u.R_jup)
     interpolated_transit_depth = (interpolated_transit_depth*u.cm).to(u.R_jup)
