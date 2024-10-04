@@ -269,4 +269,4 @@ def plot_Gaussian_values(data_chain_list: list,
     axs[2,0].set_ylabel('RV center [km/s]')
     axs[2,0].set_xlabel('Phase')
     axs[2,1].set_xlabel('$\mu$ CHECK FORMULA')
-    fig.savefig('./figures/whitemode_normal/posterior_fwhm.pdf')
+    fig.savefig('./figures/whitemode_normal/Gaussian_values_plot.pdf')

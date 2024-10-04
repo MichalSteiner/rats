@@ -365,7 +365,7 @@ def MCMC_model_Revolutions(system_parameters,
     
     lower_bound = CCF_intrinsic_list[0].spectral_axis[0].value
     upper_bound = CCF_intrinsic_list[0].spectral_axis[-1].value
-    spread_CCF = (upper_bound - lower_bound)/2
+    spread_CCF = (upper_bound - lower_bound)
     
     aRs = (system_parameters.Planet.semimajor_axis.divide(system_parameters.Star.radius)).convert_unit_to(u.dimensionless_unscaled).data
         
@@ -375,16 +375,16 @@ def MCMC_model_Revolutions(system_parameters,
                                upper=180
                                )
         
-        # veqsini = pm.Uniform('veqsini',
-        #                      lower= 0,
-        #                      upper= spread_CCF
-        #                      )
+        veqsini = pm.Uniform('veqsini',
+                             lower= 0,
+                             upper= spread_CCF
+                             )
         
-        veqsini = pm.TruncatedNormal('veqsini',
-                        mu= 7.5,
-                        sigma= 0.7,
-                        lower=0
-                        )
+        # veqsini = pm.TruncatedNormal('veqsini',
+        #                 mu= 7.5,
+        #                 sigma= 0.7,
+        #                 lower=0
+        #                 )
         
         contrast = pm.Uniform('contrast',
                               lower=0,
