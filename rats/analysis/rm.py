@@ -132,7 +132,7 @@ def calculate_systemic_velocity(master_SRF_out: sp.SpectrumList,
                 item.meta['velocity_system'] = astropy.nddata.NDDataArray(results.mean_0.value, unit = results.mean_0.unit)
 
 
-def _remove_systemic_velocity(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
+def remove_systemic_velocity(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
     """
     Removes systemic velocity from the data.
     

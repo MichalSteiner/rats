@@ -1734,7 +1734,7 @@ def shift_list(spectrum_list:sp.SpectrumList,
     else:
         new_spectrum_list = sp.SpectrumList()
         for ind, spectrum in enumerate(spectrum_list):
-            logger.info(f'Shifting spectrum number: {ind}/{len(spectrum_list)}')
+            logger.info(f'Shifting spectrum number: {ind+1}/{len(spectrum_list)}')
             
             new_spectrum_list.append(
                 shift_spectrum_multiprocessing(spectrum,shift_BERV,
