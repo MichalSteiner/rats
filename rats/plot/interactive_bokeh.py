@@ -227,9 +227,9 @@ def master_list(spectrum_list: sp.SpectrumList,
     spectrum_list = linelist.extract_region(spectrum_list,
                                             normalization=normalization,
                                             velocity_folding= velocity_fold,
-                                            polynomial_order=polynomial_order)
+                                            polynomial_order=polynomial_order) #type:ignore
     
-    binning_slider = bokeh.models.Slider(
+    binning_slider = bokeh.models.Slider( #type:ignore
         start=2,
         end=100,
         value=15,
@@ -263,7 +263,7 @@ def master_list(spectrum_list: sp.SpectrumList,
         )
         
         binned_spectrum = sm.binning_spectrum(spectrum, 15, True)
-        CDS_binned = _get_ColumnDataSource_from_spectrum(binned_spectrum)
+        CDS_binned = _get_ColumnDataSource_from_spectrum(binned_spectrum) #type:ignore
 
         p.multi_line('x_values_error',
                      'errors',
@@ -283,7 +283,7 @@ def master_list(spectrum_list: sp.SpectrumList,
         )
         
         binning_slider.js_on_change("value",
-                                    bokeh.models.CustomJS(
+                                    bokeh.models.CustomJS( #type:ignore
                                         args=dict(
                                             source_spectrum= CDS,
                                             source_binned= CDS_binned,
@@ -291,7 +291,7 @@ def master_list(spectrum_list: sp.SpectrumList,
                                         code= BINNING_JS_CODE)
                                     )
     
-    if first_spectrum.spectral_axis.unit.is_equivalent(u.AA):
+    if first_spectrum.spectral_axis.unit.is_equivalent(u.AA): #type:ignore
         for line in linelist.lines:
             p.vspan(
                 x=[line.value],
@@ -299,7 +299,7 @@ def master_list(spectrum_list: sp.SpectrumList,
                 line_color="black",
                 line_dash= 'dashed'
             )
-    elif first_spectrum.spectral_axis.unit.is_equivalent(u.m/u.s):
+    elif first_spectrum.spectral_axis.unit.is_equivalent(u.m/u.s): #type:ignore
         p.vspan(
             x=[0],
             line_width=[2],
@@ -312,9 +312,9 @@ def master_list(spectrum_list: sp.SpectrumList,
     p.legend.click_policy="hide"
     p.xaxis.axis_label = x_axis_label 
     p.yaxis.axis_label = y_axis_label
-    p.title.text = f"{first_spectrum.meta['type']} : {linelist.name}"
+    p.title.text = f"{first_spectrum.meta['type']} : {linelist.name}" #type:ignore
     
-    layout = bokeh.layouts.column(p, binning_slider, sizing_mode='scale_height') 
+    layout = bokeh.layouts.column(p, binning_slider, sizing_mode='scale_height')  #type:ignore
     blt.curdoc().theme = 'caliber'  # Apply the theme
     # blt.show(layout)
     blt.save(layout)
