@@ -48,32 +48,32 @@ def run_StarRotator_pySME(SystemParameters: SystemParametersComposite,
 
     if type(exposures) == sp.SpectrumList:
         phases = [spectrum.meta['Phase'].data for spectrum in exposures]
-        start_wlg, end_wlg = exposures[0].spectral_axis[0].to(u.nm).value, exposures[0].spectral_axis[-1].to(u.nm).value
+        start_wlg, end_wlg = exposures[0].spectral_axis[0].to(u.nm).value, exposures[0].spectral_axis[-1].to(u.nm).value #type: ignore
     else:
-        t1 = -SystemParameters.Ephemeris.transit_length_partial.convert_unit_to(u.d).data / SystemParameters.Ephemeris.period.data / 2
+        t1 = -SystemParameters.Ephemeris.transit_length_partial.convert_unit_to(u.d).data / SystemParameters.Ephemeris.period.data / 2 #type: ignore
         t4 = -t1
-        phases = np.linspace(t1, t4, exposures)
+        phases = np.linspace(t1, t4, exposures) #type: ignore
         start_wlg, end_wlg = 586.0,592.0
-           
+    
     input_dictionary = {
-        'veq': SystemParameters.Star.vsini.data,
+        'veq': SystemParameters.Star.vsini.data, #type: ignore
         'stelinc': 90.0,
         'drr': 0.0,
-        'T': SystemParameters.Star.temperature.data,
-        'FeH': SystemParameters.Star.metallicity.data,
-        'logg': SystemParameters.Star.logg.data,
-        'u1': SystemParameters.Star.LimbDarkening_u1,
-        'u2': SystemParameters.Star.LimbDarkening_u2,
+        'T': SystemParameters.Star.temperature.data, #type: ignore
+        'FeH': SystemParameters.Star.metallicity.data, #type: ignore
+        'logg': SystemParameters.Star.logg.data, #type: ignore
+        'u1': SystemParameters.Star.LimbDarkening_u1, #type: ignore
+        'u2': SystemParameters.Star.LimbDarkening_u2, #type: ignore
         'R': 140000, # FIXME
         'mus': 10,
         'model': 'pySME',
-        'sma_Rs': SystemParameters.Planet.a_rs_ratio.data,
-        'e': SystemParameters.Planet.eccentricity.data,
-        'omega': SystemParameters.Planet.argument_of_periastron.data,
-        'inclination': SystemParameters.Planet.inclination.data,
-        'obliquity': SystemParameters.Planet.projected_obliquity.data,
-        'RpRs': SystemParameters.Planet.rprs.data,
-        'P': SystemParameters.Ephemeris.period.data,
+        'sma_Rs': SystemParameters.Planet.a_rs_ratio.data, #type: ignore
+        'e': SystemParameters.Planet.eccentricity.data, #type: ignore
+        'omega': SystemParameters.Planet.argument_of_periastron.data, #type: ignore
+        'inclination': SystemParameters.Planet.inclination.data, #type: ignore
+        'obliquity': SystemParameters.Planet.projected_obliquity.data, #type: ignore
+        'RpRs': SystemParameters.Planet.rprs.data, #type: ignore
+        'P': SystemParameters.Ephemeris.period.data, #type: ignore
         'phases': phases,
         'grid_model': '',
         'abund': abundances,

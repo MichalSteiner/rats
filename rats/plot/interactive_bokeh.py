@@ -103,15 +103,15 @@ def _get_ColumnDataSource_from_spectrum(spectrum: sp.Spectrum1D | sp.SpectrumCol
     if type(spectrum) == sp.SpectrumCollection:
         raise NotImplementedError()
     
-    CDS = bokeh.models.ColumnDataSource(
+    CDS = bokeh.models.ColumnDataSource( #type:ignore
         {
-        'x': spectrum.spectral_axis.value,
+        'x': spectrum.spectral_axis.value, #type:ignore
         'y': spectrum.flux.value,
-        'y_error': spectrum.uncertainty.array,
-        'y_error_upper': spectrum.flux.value + spectrum.uncertainty.array,
-        'y_error_lower': spectrum.flux.value - spectrum.uncertainty.array,
-        'errors': list(np.asarray([(spectrum.flux.value + spectrum.uncertainty.array), (spectrum.flux.value - spectrum.uncertainty.array)]).T),
-        'x_values_error': list(np.asarray([(spectrum.spectral_axis.value), (spectrum.spectral_axis.value)]).T),
+        'y_error': spectrum.uncertainty.array, #type:ignore
+        'y_error_upper': spectrum.flux.value + spectrum.uncertainty.array, #type:ignore
+        'y_error_lower': spectrum.flux.value - spectrum.uncertainty.array, #type:ignore
+        'errors': list(np.asarray([(spectrum.flux.value + spectrum.uncertainty.array), (spectrum.flux.value - spectrum.uncertainty.array)]).T),#type:ignore
+        'x_values_error': list(np.asarray([(spectrum.spectral_axis.value), (spectrum.spectral_axis.value)]).T),#type:ignore
         }
     )
     
@@ -127,7 +127,7 @@ def _darkmode_presentation():
     ...
 
 
-def _get_axis_labels(first_spectrum: sp.Spectrum1D | sp.SpectrumCollection) -> [str, str]:
+def _get_axis_labels(first_spectrum: sp.Spectrum1D | sp.SpectrumCollection) -> tuple[str, str]:
     """
     Get axis labels for the plot from the first spectrum.
 
@@ -145,14 +145,14 @@ def _get_axis_labels(first_spectrum: sp.Spectrum1D | sp.SpectrumCollection) -> [
     """
     
     
-    if first_spectrum.spectral_axis.unit.is_equivalent(u.AA):
-        x_axis_label = f'Wavelength [{first_spectrum.spectral_axis.unit}]'
-    elif first_spectrum.spectral_axis.unit.is_equivalent(u.m/u.s):
-        x_axis_label = f'Velocity [{first_spectrum.spectral_axis.unit}]'
+    if first_spectrum.spectral_axis.unit.is_equivalent(u.AA): #type:ignore
+        x_axis_label = f'Wavelength [{first_spectrum.spectral_axis.unit}]' #type:ignore
+    elif first_spectrum.spectral_axis.unit.is_equivalent(u.m/u.s): #type:ignore
+        x_axis_label = f'Velocity [{first_spectrum.spectral_axis.unit}]' #type:ignore
     else:
         raise ValueError('Unknown unit type')
     try:
-        if first_spectrum.flux.unit.name == '':
+        if first_spectrum.flux.unit.name == '': #type:ignore
             y_axis_label = f'Flux [unitless]'
         else:
             y_axis_label = f'Flux [{first_spectrum.flux.unit}]'
@@ -188,7 +188,7 @@ def _prepare_master_list_figure_directory(first_spectrum: sp.Spectrum1D | sp.Spe
         Figure filename to save the plot to.
     """
     
-    os.makedirs(f'./figures/{mode}/master_list/{first_spectrum.meta["type"]}/{first_spectrum.meta["rf"]}/',
+    os.makedirs(f'./figures/{mode}/master_list/{first_spectrum.meta["type"]}/{first_spectrum.meta["rf"]}/', #type:ignore
             mode = 0o777,
             exist_ok = True
             )
@@ -197,7 +197,7 @@ def _prepare_master_list_figure_directory(first_spectrum: sp.Spectrum1D | sp.Spe
         if prepend != '':
             prepend = prepend + '_'
         
-        figure_filename = f'./figures/{mode}/master_list/{first_spectrum.meta["type"]}/{first_spectrum.meta["rf"]}/{prepend}{linelist.name}.html'
+        figure_filename = f'./figures/{mode}/master_list/{first_spectrum.meta["type"]}/{first_spectrum.meta["rf"]}/{prepend}{linelist.name}.html' #type:ignore
         
     return figure_filename
 
@@ -398,7 +398,7 @@ def fiber_B_correction(fiber_A_master: sp.SpectrumList,
         p.legend.location = "top_right"
         p.xaxis.axis_label = x_axis_label 
         p.yaxis.axis_label = y_axis_label
-        p.title.text = f"Fiber A and B comparison for night: {num_night}"
+        p.title.text = f"Fiber A and B comparison for night: {num_night}" #type:ignore
         blt.curdoc().theme = 'caliber'
         blt.save(p)
 
