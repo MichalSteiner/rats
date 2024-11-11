@@ -47,10 +47,10 @@ def _get_planet(planet_name: str) -> planet.Planet:
     prt.planet.Planet
         Planet parameters as extracted by pRT.
     """
-    planet = planet.Planet.get(
+    planet_obj = planet.Planet.get(
         planet_name
         )
-    return planet
+    return planet_obj
 
 def _get_edges_wavelength(spectral_axis: sp.SpectralAxis) -> list:
     """
@@ -66,7 +66,7 @@ def _get_edges_wavelength(spectral_axis: sp.SpectralAxis) -> list:
     list
         Edges of the spectral axis as can be added to the Radtrans object. 
     """
-    return [spectral_axis[0].to(u.um).value, spectral_axis[-1].to(u.um).value]
+    return [spectral_axis[0].to(u.um).value, spectral_axis[-1].to(u.um).value] #type: ignore
 
 @time_function
 def _define_atmosphere_model(pressures: np.ndarray,
@@ -98,18 +98,25 @@ def _define_atmosphere_model(pressures: np.ndarray,
         Radtrans model for the atmosphere
     """
     
-    if type(wavelength_boundaries) == sp.SpectralAxis:
-         wavelength_boundaries = _get_edges_wavelength(wavelength_boundaries)
+    if isinstance(wavelength_boundaries, sp.SpectralAxis):
+        wavelength_boundaries = _get_edges_wavelength(wavelength_boundaries)
     
-    atmosphere = prt.Radtrans(
-        pressures=pressures,
-        line_species=line_species,
-        rayleigh_species= rayleigh_species,
-        gas_continuum_contributors= gas_continuum_contributors,
-        line_opacity_mode = 'lbl',
-        wavelength_boundaries= wavelength_boundaries,
-        **kwargs
-    )
+    radtrans_params = {
+        'pressures': pressures,
+        'line_species': line_species,
+        'wavelength_boundaries': wavelength_boundaries,
+        'line_opacity_mode': 'lbl'
+    }
+    
+    if rayleigh_species is not None:
+        radtrans_params['rayleigh_species'] = rayleigh_species
+    
+    if gas_continuum_contributors is not None:
+        radtrans_params['gas_continuum_contributors'] = gas_continuum_contributors
+    
+    radtrans_params.update(kwargs)
+    
+    atmosphere = prt.Radtrans(**radtrans_params)
     
     return atmosphere
 
@@ -139,7 +146,10 @@ def _T_P_profile_guillot(SystemParameters: rats.parameters.SystemParametersCompo
     gamma = 0.4
     T_int = 300.
     
-    T_equ = SystemParameters.Planet.equilibrium_temperature.data
+    if SystemParameters.Planet.equilibrium_temperature is not None:
+        T_equ = SystemParameters.Planet.equilibrium_temperature.data
+    else:
+        raise ValueError("SystemParameters.Planet.equilibrium_temperature is None")
 
     temperatures = temperature_profile_function_guillot_global(
         pressures= pressures_bar,
@@ -189,7 +199,7 @@ def _calculate_transmission_model(atmosphere: prt.Radtrans,
                                   mean_molar_masses: np.ndarray,
                                   SystemParameters: rats.parameters.SystemParametersComposite,
                                   reference_pressure: float = 10E-2,
-                                  ) -> [np.ndarray, np.ndarray, np.ndarray]:
+                                  ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculates transmission model based on the input parameters.
 
@@ -214,15 +224,15 @@ def _calculate_transmission_model(atmosphere: prt.Radtrans,
         Wavelengths and transit radii obtained by the model, and interpolated transit radii on the requested spectral axis
     """
     reference_gravity = SystemParameters.Planet.gravity_acceleration.convert_unit_to(u.cm/u.s/u.s).data
-    planet_radius = SystemParameters.Planet.radius.convert_unit_to(u.cm).data
+    planet_radius = SystemParameters.Planet.radius.convert_unit_to(u.cm).data #type: ignore
     
     wavelengths, transit_radii, _ = atmosphere.calculate_transit_radii(temperatures=temperatures,
                                                                    mass_fractions=mass_fractions,
                                                                    mean_molar_masses=mean_molar_masses,
-                                                                   reference_gravity=reference_gravity,
-                                                                   planet_radius=planet_radius,
+                                                                   reference_gravity=reference_gravity, #type: ignore
+                                                                   planet_radius=planet_radius, #type: ignore
                                                                    reference_pressure=reference_pressure)
-    wavelengths_air = ((_vactoair((wavelengths*u.cm).to(u.nm).value))*u.nm).to(u.cm).value
+    wavelengths_air = ((_vactoair((wavelengths*u.cm).to(u.nm).value))*u.nm).to(u.cm).value #type: ignore
     flux_interpolation = scipy.interpolate.CubicSpline(wavelengths_air, transit_radii, extrapolate=False)
     interpolated_transit_depth = flux_interpolation(spectral_axis.to(u.cm).value)
     
@@ -231,8 +241,8 @@ def _calculate_transmission_model(atmosphere: prt.Radtrans,
 
 
 def _remove_continuum(spectral_axis: sp.SpectralAxis,
-                      flux: np.ndarray
-                      ) -> np.ndarray:
+                      flux: u.Quantity
+                      ) -> u.Quantity:
     """
     Removes continuum from the template. Necessary for high-resolution as we lose information about continuum through normalization.
 
@@ -263,13 +273,11 @@ def _remove_continuum(spectral_axis: sp.SpectralAxis,
     mask = np.where(abs((flux- fitted_line(spectral_axis))/ flux) < 0.05)
     fitted_line = fit(line_init, spectral_axis[mask], flux[mask])
     
-    flux = flux - fitted_line(spectral_axis) + 1 *flux.unit
-    mask = np.where(flux < 1.05*flux.unit)
-    flux[mask] = 1 *flux.unit
+    flux = flux - fitted_line(spectral_axis) + 1 *flux.unit #type: ignore
+    mask = np.where(flux < 1.05*flux.unit) #type: ignore
+    flux[mask] = 1 *flux.unit #type: ignore
     
     return flux
-
-
 
 def create_template(spectral_axis: sp.SpectralAxis,
                     SystemParameters: rats.parameters.SystemParametersComposite,
@@ -346,25 +354,19 @@ def create_template(spectral_axis: sp.SpectralAxis,
         reference_pressure= reference_pressure
     )
     
-    # mpl.use('TkAgg')
-    # fig,ax = plt.subplots(1)
-    # ax.plot(wavelengths, transit_radii)
-    
-    
-    
-    transit_radii = (transit_radii*u.cm).to(u.R_jup)
-    interpolated_transit_depth = (interpolated_transit_depth*u.cm).to(u.R_jup)
+    transit_radii = (transit_radii*u.cm).to(u.R_jup) #type: ignore
+    interpolated_transit_depth = (interpolated_transit_depth*u.cm).to(u.R_jup) #type: ignore
     
     interpolated_transit_depth = _remove_continuum(spectral_axis= spectral_axis,
                                                    flux= interpolated_transit_depth)
     
-    logger.print(f'Generated template with petitRADtrans for line list {line_species}')
+    logger.print(f'Generated template with petitRADtrans for line list {line_species}') #type: ignore
     
     equivalency_transmission, F_lam, R, R_plam, delta_lam, H_num = sm.custom_transmission_units(SystemParameters)
     
     template = sp.Spectrum1D(
         spectral_axis= spectral_axis,
-        flux= interpolated_transit_depth.value * R_plam,
+        flux= interpolated_transit_depth.value * R_plam, 
         uncertainty= StdDevUncertainty(np.zeros_like(interpolated_transit_depth.value)),
         mask = np.isnan(interpolated_transit_depth.value),
         meta= {
