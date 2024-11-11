@@ -146,7 +146,7 @@ class CalculationSystem:
         inclination = self.Planet.inclination.convert_unit_to(u.rad)
         
         # 2pi * a / P * sin(2pi*phase) * sin(i)
-        planet_velocity = NDDataArray(2*np.pi).multiply(
+        planet_velocity = NDDataArray(2*np.pi,  uncertainty = StdDevUncertainty(0)).multiply(
             semimajor_axis
         ).divide(
             period

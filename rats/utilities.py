@@ -78,8 +78,10 @@ def default_logger_format(logger_update):
     from colorlog import ColoredFormatter
     logging.root.setLevel(LOG_LEVEL)
     formatter = ColoredFormatter(LOGFORMAT)
-    formatter.log_colors['WARNING'] = "cyan"
-    formatter.log_colors['PRINT'] = "yellow"
+    formatter.log_colors = {
+        'WARNING': 'cyan',
+        'PRINT': 'yellow'
+    }
     stream = logging.StreamHandler()
     stream.setLevel(LOG_LEVEL)
     stream.setFormatter(formatter)

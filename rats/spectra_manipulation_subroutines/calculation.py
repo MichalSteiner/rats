@@ -154,15 +154,35 @@ def _error_bin(array: np.ndarray | list) -> float:
     return value
 
 #%% Get spectrum type
-def _get_spectrum_type(key: str, value: str | None) -> str:
+def _get_spectrum_type(key: str | None, value: str | None) -> str:
     """
-    Supplementary function giving spec_type value for each key,value used
-    Used for labeling plots
-    Input:
-        key ; key of meta dictionary
-        value ; value of meta dictionary
-    Output:
-        spec_type ; Type of master spectrum (eg. 'out-of-Transit master')
+    Supplementary function giving spec_type value for each key,value used.
+    Used for labeling plots.
+
+    Parameters
+    ----------
+    key : str | None
+        Key of meta dictionary.
+    value : str | None
+        Value of meta dictionary.
+
+    Returns
+    -------
+    spectrum_type : str
+        Type of master spectrum (e.g., 'Out-of-Transit master').
+
+    Notes
+    -----
+    The function determines the type of master spectrum based on the provided key and value.
+    - If the key is 'Transit_partial' or 'Transit_full':
+        - If the value is False, the spectrum type is 'Out-of-transit'.
+        - If the value is True, the spectrum type is 'In-transit (transmission)'.
+    - If the key is 'Preingress', the spectrum type is 'Pre-ingress'.
+    - If the key is 'Postegress', the spectrum type is 'Post-egress'.
+    - If the key is 'telluric_corrected':
+        - If the value is True, the spectrum type is 'After-telluric-correction'.
+        - If the value is False, the spectrum type is 'Before-telluric-correction'.
+    - If the key is None, the spectrum type is 'None' (for debugging).
     """
     # TODO rewrite so it gives always a type
     # Type of master based on in/out of transit
