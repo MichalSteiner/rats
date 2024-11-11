@@ -1357,7 +1357,7 @@ def cosmic_correction_all(spec_list, force_load=False, force_skip=False):
 @save_and_load
 def calculate_master_list(spectrum_list: sp.SpectrumList,
                           key: None | str = None,
-                          value: None | str = None,
+                          value: None | str | bool = None,
                           sn_type: None | str = None,
                           method: str = 'average',
                           force_load: bool = False,

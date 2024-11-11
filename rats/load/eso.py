@@ -51,11 +51,12 @@ def _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollectio
     sp.Spectrum1D | sp.SpectrumCollection
         Output spectrum.
     """
-    
+    if spectrum.uncertainty is None:
+        raise ValueError('Spectrum must have uncertainty to be able to replace non-positive values with NaNs.')
     
     new_flux = np.where(spectrum.flux > 0, spectrum.flux.value, np.nan)
     new_uncertainty = np.where(spectrum.flux > 0, spectrum.uncertainty.array, np.nan)
-    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty)
+    new_uncertainty = astropy.nddata.StdDevUncertainty(new_uncertainty) #type: ignore
     
     match type(spectrum):
         case sp.Spectrum1D:
@@ -63,7 +64,7 @@ def _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollectio
                 spectral_axis= spectrum.spectral_axis,
                 flux= new_flux * spectrum.flux.unit,
                 uncertainty= new_uncertainty,
-                meta= spectrum.meta.copy(),
+                meta= spectrum.meta.copy() if spectrum.meta is not None else None,
                 mask = np.isnan(new_flux)
             )
         case sp.SpectrumCollection:
@@ -71,7 +72,7 @@ def _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollectio
                 spectral_axis= spectrum.spectral_axis,
                 flux= new_flux * spectrum.flux.unit,
                 uncertainty= new_uncertainty,
-                meta= spectrum.meta.copy(),
+                meta= spectrum.meta.copy() if spectrum.meta is not None else None,
                 mask = np.isnan(new_flux)
             )
         case _:
@@ -79,7 +80,7 @@ def _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollectio
     return new_spectrum
 
 #%% Load spectrum
-def load_spectrum(filename: str) -> sp.Spectrum1D:
+def load_spectrum(filename: str) -> sp.Spectrum1D | sp.SpectrumCollection:
     """
     Load a single spectrum based on filename.
 
@@ -99,7 +100,7 @@ def load_spectrum(filename: str) -> sp.Spectrum1D:
         If spectral type format is not available.
     """
     fits_file = fits.open(filename)
-    header = fits_file[0].header
+    header = fits_file[0].header #type: ignore
     _check_DRS_version(header['HIERARCH ESO PRO REC1 PIPE ID'])
     logger.debug('Opening file:')
     logger.debug('    ' + filename) 
@@ -136,9 +137,9 @@ def load_S1D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
         Loaded spectrum
     """
     
-    data = fits_hdulist[1].data
-    main_header = fits_hdulist[0].header
-    data_header = fits_hdulist[1].header
+    data = fits_hdulist[1].data #type: ignore
+    main_header = fits_hdulist[0].header #type: ignore
+    data_header = fits_hdulist[1].header #type: ignore
     
     # Load wavelength, flux and flux error fields with correct units based on TUNIT and TTYPE fields.
     for ii in range(data_header['TFIELDS']):
@@ -168,7 +169,7 @@ def load_S1D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
     spectrum = sp.Spectrum1D(
         spectral_axis= wavelength,
         flux= flux,
-        uncertainty= astropy.nddata.StdDevUncertainty(error, copy=True),
+        uncertainty= astropy.nddata.StdDevUncertainty(error, copy=True), #type: ignore
         mask = _mask_flux_array(flux),
         meta = meta,
         )
@@ -190,11 +191,11 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     sp.SpectrumCollection
         SpectrumCollection (S2D format) with n_orders x n_pixels shape. It is corrected for the dispersion effect on the S2D spectra using the eso._correct_dispersion_S2D() method.
     """
-    main_header = fits_hdulist[0].header # Preparing header of spectra
-    flux = fits_hdulist['SCIDATA'].data # Flux array
-    flux_err = fits_hdulist['ERRDATA'].data # Flux error array
-    wavelength_air = fits_hdulist['WAVEDATA_AIR_BARY'].data # Wavedata - air (ground instruments)
-    nb_orders = fits_hdulist['SCIDATA'].header['NAXIS2'] # Number of orders 
+    main_header = fits_hdulist[0].header # type: ignore
+    flux = fits_hdulist['SCIDATA'].data #type: ignore
+    flux_err = fits_hdulist['ERRDATA'].data #type: ignore
+    wavelength_air = fits_hdulist['WAVEDATA_AIR_BARY'].data #type: ignore
+    nb_orders = fits_hdulist['SCIDATA'].header['NAXIS2'] #type: ignore
     
     flux = _correct_dispersion_S2D(wavelength_air,
                                    flux,
@@ -212,9 +213,9 @@ def load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumColl
     meta.update(_load_meta_from_header(main_header))
     
     spectrum = sp.SpectrumCollection(
-        flux = flux * u.ct,
-        spectral_axis = wavelength_air * u.AA,
-        uncertainty = astropy.nddata.StdDevUncertainty(flux_err, copy= True),
+        flux = flux * u.ct, #type: ignore
+        spectral_axis = wavelength_air * u.AA,#type: ignore
+        uncertainty = astropy.nddata.StdDevUncertainty(flux_err, copy= True),#type: ignore
         meta = meta,
         mask = _mask_flux_array(flux)
         )
@@ -235,14 +236,14 @@ def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
     spectrum : sp.Spectrum1D
         CCF result of single spectrum with template mask
     """
-    main_header = fits_hdulist[0].header # Preparing header of spectra
+    main_header = fits_hdulist[0].header #type: ignore
     
     rv_start = main_header['HIERARCH ESO RV START']
     rv_step = main_header['HIERARCH ESO RV STEP']
     
-    flux_total = fits_hdulist['SCIDATA'].data[-1] * u.ct
+    flux_total = fits_hdulist['SCIDATA'].data[-1] * u.ct#type: ignore
     rv_range = np.arange(rv_start, rv_start+ rv_step*len(flux_total), rv_step )
-    error_total = astropy.nddata.StdDevUncertainty(fits_hdulist['ERRDATA'].data[-1])
+    error_total = astropy.nddata.StdDevUncertainty(fits_hdulist['ERRDATA'].data[-1])#type: ignore
     
     meta = _basic_meta_parameters()
     meta.update({
@@ -253,11 +254,8 @@ def load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
         })
     
     meta.update(_load_meta_from_header(main_header))
-    # TODO: update meta parameters for CCF
-    
-    
     spectrum = sp.Spectrum1D(
-        spectral_axis = rv_range * u.km/u.s,
+        spectral_axis = rv_range * u.km/u.s,#type: ignore
         flux = flux_total,
         uncertainty = error_total,
         meta= meta,
@@ -501,8 +499,8 @@ def _numbering_nights(spectrum_list: sp.SpectrumList):
 
 #%% correct_dispersion_S2D
 def _correct_dispersion_S2D(spectral_axis: sp.spectra.spectral_axis.SpectralAxis,
-                           flux: astropy.units.quantity.Quantity,
-                           uncertainty: astropy.nddata.StdDevUncertainty) -> astropy.units.quantity.Quantity:
+                           flux: u.Quantity,
+                           uncertainty: astropy.nddata.StdDevUncertainty) -> u.Quantity: #type: ignore
     """
     Corrects for the dispersion effect on the S2D spectra.
     
@@ -533,7 +531,7 @@ def _correct_dispersion_S2D(spectral_axis: sp.spectra.spectral_axis.SpectralAxis
     flux = flux / difference
     return flux
 #%% find_UT
-def _find_UT(header: np.ndarray) -> int:
+def _find_UT(header: fits.header.Header) -> str:
     '''
     Convenience function returning which UT was used for current spectrum of ESPRESSO. Does not work for 4-UT mode yet.
     #TODO Add 4-UT
@@ -549,9 +547,12 @@ def _find_UT(header: np.ndarray) -> int:
         Which UT was used.
 
     '''
-    return int(header['TELESCOP'][-1:])
+    telescope_value = header.get('TELESCOP')
+    if telescope_value is None:
+        raise ValueError("TELESCOP key is missing in the header")
+    return str(int(str(telescope_value)[-1:]))
 #%% find_nb_orders
-def _find_nb_orders(header: np.ndarray) -> int:
+def _find_nb_orders(header: fits.header.Header) -> int:
     '''
     Convenience function returning number of orders for current spectrum (HARPS, ESPRESSO), new DRS pipeline
 
@@ -568,9 +569,9 @@ def _find_nb_orders(header: np.ndarray) -> int:
     '''
     if header['INSTRUME'] == 'ESPRESSO':
          nb_orders = 170
-    elif header['INSTRUME'] == 'HARPS' and '_A' in header['PIPEFILE']: 
+    elif header['INSTRUME'] == 'HARPS' and '_A' in header['PIPEFILE']: #type: ignore
         nb_orders = 71
-    elif header['INSTRUME'] == 'HARPS' and '_B' in header['PIPEFILE']: # Missing order in fiber B
+    elif header['INSTRUME'] == 'HARPS' and '_B' in header['PIPEFILE']: #type: ignore
         nb_orders = 70
     elif header['INSTRUME'] == 'NIRPS':
         nb_orders = 70  
@@ -663,9 +664,9 @@ def _find_unit(header_TUNITx_value: str) -> u.Unit:
         In case unit is not recognized, raise a ValueError
     """
     if header_TUNITx_value == 'angstrom':
-        result = u.AA
+        result = u.AA #type: ignore
     elif header_TUNITx_value == 'e-':
-        result = u.ct
+        result = u.ct #type: ignore
     else:
         raise ValueError('Type of unit not recognized.')
     return result
@@ -695,18 +696,18 @@ def _load_meta_from_header(header: fits.header.Header) -> dict:
     
     # As ESPRESSO header keywords change based on UT used
     if header['INSTRUME'] == 'ESPRESSO':
-        UT = str(_find_UT(header))
+        UT = _find_UT(header)
     else:
         UT = ''
     
     # Create dictionary
     meta = {
-            'BJD':header['HIERARCH ESO QC BJD'] * u.day, # BJD
-            'velocity_BERV':header['HIERARCH ESO QC BERV'] * 1000 * u.m / u.s , # BERV velocity
+            'BJD':header['HIERARCH ESO QC BJD'] * u.day, #type: ignore
+            'velocity_BERV':header['HIERARCH ESO QC BERV'] * 1000 * u.m / u.s , #type: ignore
             'Airmass':np.mean([header['HIERARCH ESO TEL%s AIRM START'%(UT)],
-                               header['HIERARCH ESO TEL%s AIRM END'%(UT)]]), # Airmass
+                               header['HIERARCH ESO TEL%s AIRM END'%(UT)]]), #type: ignore
             'Seeing':np.mean([header['HIERARCH ESO TEL%s AMBI FWHM START'%(UT)],
-                              header['HIERARCH ESO TEL%s AMBI FWHM END'%(UT)]]), # Seeing
+                              header['HIERARCH ESO TEL%s AMBI FWHM END'%(UT)]]), #type: ignore
             'S_N_all':sn, # Signal-to-noise,
             'Average_S_N':sn[0],
             'Exptime':header['EXPTIME'] * u.s, #Exposure time,

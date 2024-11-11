@@ -10,10 +10,6 @@ from dataclasses import dataclass
 import specutils as sp
 import astropy.units as u
 import matplotlib.pyplot as plt
-#%%
-SpectralRegion = sp.spectra.spectral_region.SpectralRegion
-Axes = plt.Axes
-Figure = plt.figure
 
 #%% ProminentLines
 @dataclass

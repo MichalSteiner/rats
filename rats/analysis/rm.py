@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
 
 #%% Fitting a Gaussian profile to the 
-def _fit_gaussian_profile(CCF: sp.Spectrum1D) -> astropy.modeling.core.CompoundModel:
+def _fit_gaussian_profile(CCF: sp.Spectrum1D) -> astropy.modeling.core.CompoundModel: #type: ignore
     """
     Fit a Gaussian profile to the CCF output.
 
@@ -27,16 +27,16 @@ def _fit_gaussian_profile(CCF: sp.Spectrum1D) -> astropy.modeling.core.CompoundM
         Gaussian fit as fitted by astropy package.
     """
     
-    Gaussian_model = astropy.modeling.models.Gaussian1D(
+    Gaussian_model = astropy.modeling.models.Gaussian1D(#type: ignore
         amplitude=-np.nanmedian(CCF.flux),
         mean=CCF.spectral_axis.mean(),
-        stddev=5 *u.km/u.s) + astropy.modeling.models.Const1D(
+        stddev=5 *u.km/u.s) + astropy.modeling.models.Const1D(#type: ignore
             amplitude=np.nanmedian(CCF.flux)
             )
     if abs(Gaussian_model.mean_0.value) < 1E-4:
         Gaussian_model.mean_0.value = 1E-4
     
-    gaussian_fitter = astropy.modeling.fitting.LevMarLSQFitter(calc_uncertainties=True)
+    gaussian_fitter = astropy.modeling.fitting.LevMarLSQFitter(calc_uncertainties=True)#type: ignore
     
     finite_indices = np.isfinite(CCF.flux)
     Gaussian_fit = gaussian_fitter(Gaussian_model,
@@ -119,17 +119,17 @@ def calculate_systemic_velocity(master_SRF_out: sp.SpectrumList,
         Spectrum list to input the systemic velocity in. If None, this part of the function is ignored. 
     """
 
-    logger.print('Calculating systemic velocity:')
-    logger.print('='*50)
+    logger.print('Calculating systemic velocity:') #type: ignore
+    logger.print('='*50) #type: ignore
     for ind, night in enumerate(master_SRF_out):
         results, uncertainty = _fit_gaussian_profile(night)
-        logger.print(f'Systemic velocity for night {night.meta["night"]}: {results.mean_0.value} {results.mean_0.unit} ± {uncertainty[1]}')
+        logger.print(f'Systemic velocity for night {night.meta["night"]}: {results.mean_0.value} {results.mean_0.unit} ± {uncertainty[1]}') #type: ignore
         
         if data_SRF is None:
             continue
         for item in data_SRF:
             if item.meta['Night'] == night.meta['night']:
-                item.meta['velocity_system'] = astropy.nddata.NDDataArray(results.mean_0.value, unit = results.mean_0.unit)
+                item.meta['velocity_system'] = astropy.nddata.NDDataArray(results.mean_0.value, unit = results.mean_0.unit) #type: ignore
 
 
 def remove_systemic_velocity(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
@@ -165,7 +165,7 @@ def remove_systemic_velocity(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
     return new_spectrum_list
 #%% Subtraction of master out
 def subtract_master_out(CCF_list: sp.SpectrumList,
-                        master_out_list: sp.SpectrumList) -> [sp.SpectrumList, sp.SpectrumList]:
+                        master_out_list: sp.SpectrumList) -> tuple[sp.SpectrumList, sp.SpectrumList]:
     """
     Subtract master out from the CCF list.
     
@@ -236,6 +236,8 @@ def _MCMC_model_local_CCF(CCF_local: sp.Spectrum1D,
                          target_accept: float = 0.99,
                          **kwargs_pymc,
                          ):
+    if CCF_local.meta is None:
+        raise ValueError('Spectrum has no meta data')
     
     assert CCF_local.meta['Transit_partial'], 'Spectrum is not transiting'
     
@@ -264,14 +266,15 @@ def _MCMC_model_local_CCF(CCF_local: sp.Spectrum1D,
                               )
         
         # Expecting a Gaussian profile
+        # fwhm to sigma is approx fwhm = 2.35482*sigma
         expected = (-contrast *
-                    pm.math.exp(-((CCF_local.spectral_axis[ind].value-rvcenter)**2)/(2*((fwhm/2.35482)**2))) + 1) # fwhm to sigma is approx fwhm = 2.35482*sigma
+                    pm.math.exp(-((CCF_local.spectral_axis[ind].value-rvcenter)**2)/(2*((fwhm/2.35482)**2))) + 1)  #type: ignore
         
         # Observed, expecting Gaussian, sigma = uncertainty, observed = flux
         observed = pm.Normal("observed",
                              mu=expected,
                              sigma= CCF_local.uncertainty[ind].array,
-                             observed=CCF_local.flux[ind].value
+                             observed=CCF_local.flux.value[ind]
                              )
         
         idata = pm.sample(
@@ -398,11 +401,10 @@ def MCMC_model_Revolutions(system_parameters,
                     shape= fwhm_order + 1
                     )
         
-        x_p = aRs * pm.math.sin(2*np.pi * phase)
-        y_p = aRs * pm.math.cos(2*np.pi * phase) * pm.math.cos(system_parameters.Planet.inclination.data / 180*np.pi)
-        
-        x_perpendicular = x_p* pm.math.cos(obliquity/180*np.pi) - y_p * pm.math.sin(obliquity/180*np.pi)
-        y_perpendicular = x_p * pm.math.sin(obliquity/180*np.pi) - y_p * pm.math.cos(obliquity/180*np.pi)
+        x_p = aRs * pm.math.sin(2*np.pi * phase) # type: ignore
+        y_p = aRs * pm.math.cos(2*np.pi * phase) * pm.math.cos(system_parameters.Planet.inclination.data / 180*np.pi) #type: ignore
+        x_perpendicular = x_p* pm.math.cos(obliquity/180*np.pi) - y_p * pm.math.sin(obliquity/180*np.pi) #type: ignore
+        y_perpendicular = x_p * pm.math.sin(obliquity/180*np.pi) - y_p * pm.math.cos(obliquity/180*np.pi) #type: ignore
         
         local_stellar_velocity = x_perpendicular * veqsini
         
@@ -416,7 +418,7 @@ def MCMC_model_Revolutions(system_parameters,
         
         # Expecting a Gaussian profile
         expected = (    
-            -contrast_polynomial * pm.math.exp(-(
+            -contrast_polynomial * pm.math.exp(-( #type: ignore
                 (wavelength - local_stellar_velocity)**2
                 )/
                                (2*((fwhm_polynomial/2.35482)**2))
@@ -462,9 +464,7 @@ def wrapper_RM_Revolutions(data_raw_A: sp.SpectrumList):
     
     master_SRF_out = sm.calculate_master_list(data_SRF,
                                           key = 'Transit_partial',
-                                          value =False,
-                                          force_load = force_load,
-                                          force_skip = force_skip,
+                                          value = False,
                                           pkl_name = 'master_out_SRF_RM_CCF.pkl'
                                           )
     CCF_residual, CCF_intrinsic = subtract_master_out(data_SRF ,master_SRF_out)

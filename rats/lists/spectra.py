@@ -14,6 +14,9 @@ import numpy as np
 import rats.spectra_manipulation as sm
 import plotly.graph_objects as go
 import astropy.modeling as asmod
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+
 #%% ProminentLines
 @dataclass
 class _ProminentLines:
@@ -28,7 +31,7 @@ class _ProminentLines:
     
     def create_figure(self,
                       n_rows: int = 1,
-                      ) -> tuple[plt.Figure, list[plt.Axes]]:
+                      ) -> tuple[Figure, list[Axes]]:
         '''
         Initialize a figure for given line
 
@@ -46,8 +49,12 @@ class _ProminentLines:
 
         '''
         fig, axs = plt.subplots(n_rows, len(self.wavelength_range))
+        if isinstance(axs, Axes):
+            axs = [axs]
+        else:
+            axs = axs.tolist()
         
-        return fig,axs
+        return fig, axs
         
     def set_xlim(self,
                  axs: list
@@ -65,7 +72,7 @@ class _ProminentLines:
         None
 
         '''
-        for subregion, ax in zip(self.wavelength_range,axs):
+        for subregion, ax in zip(self.wavelength_range,axs): #type: ignore
             ax.set_xlim(subregion.lower, subregion.upper)
         return None
     
@@ -90,7 +97,29 @@ class _ProminentLines:
     def _fit_local_continuum(self,
                              spectrum: sp.Spectrum1D | sp.SpectrumCollection,
                              polynomial_order: int = 1) -> sp.Spectrum1D | sp.SpectrumCollection:
+        """
+        Fits a local continuum to the given spectrum using a polynomial model.
 
+        Parameters:
+        -----------
+        spectrum : sp.Spectrum1D | sp.SpectrumCollection
+            The input spectrum or collection of spectra to fit the continuum to.
+        polynomial_order : int, optional
+            The order of the polynomial to fit. Default is 1.
+            - 0: Fits a constant continuum using the median flux value.
+            - 1: Fits a linear continuum.
+            - >1: Fits a polynomial continuum of the specified order.
+
+        Returns:
+        --------
+        sp.Spectrum1D | sp.SpectrumCollection
+            The fitted continuum model as a Spectrum1D or SpectrumCollection object.
+
+        Raises:
+        -------
+        ValueError
+            If the polynomial_order is less than 0.
+        """
         match polynomial_order:
             case 0:
                 model = asmod.models.Const1D(amplitude= np.nanmedian(spectrum.flux))
@@ -110,7 +139,24 @@ class _ProminentLines:
                             spectrum_list: sp.SpectrumList,
                             polynomial_order: int = 1,
                             ) -> sp.SpectrumList:
+        """
+        Perform local normalization on a list of spectra.
         
+        This method fits a local continuum to each spectrum in the provided
+        spectrum list using a polynomial of the specified order. Each spectrum
+        is then normalized by dividing it by the fitted continuum.
+        
+        Parameters:
+        -----------
+        spectrum_list : sp.SpectrumList
+            A list of spectra to be normalized.
+        polynomial_order : int, optional
+            The order of the polynomial to fit the local continuum. Default is 1.
+        Returns:
+        --------
+        sp.SpectrumList
+            A new list of normalized spectra.
+        """
         new_spectrum_list = sp.SpectrumList()
         for spectrum in spectrum_list:
             fitted_model = self._fit_local_continuum(
@@ -118,7 +164,7 @@ class _ProminentLines:
                 polynomial_order= polynomial_order,
                 )
             
-            new_spectrum = spectrum.divide(fitted_model(spectrum.spectral_axis))
+            new_spectrum = spectrum.divide(fitted_model(spectrum.spectral_axis))#type: ignore
             new_spectrum_list.append(new_spectrum)
         
         return new_spectrum_list
@@ -126,7 +172,7 @@ class _ProminentLines:
     
     def velocity_fold(self,
                       spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection,
-                      constraint: list = [-200, 201]*u.km/u.s) -> tuple[sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection, sp.SpectrumList]:
+                      constraint: list = [-200, 201]*u.km/u.s) -> tuple[sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection, sp.SpectrumList]: #type: ignore
         """
         Velocity folding based on the line list attribute.
 
@@ -144,10 +190,12 @@ class _ProminentLines:
         sp.SpectrumList
             Separate lines separated in velocity range. Shape is (len(spectra), len(self.lines))
         """
-        if type(spectra) == sp.SpectrumList:
+        if isinstance(spectra, sp.SpectrumList):
             new_spectra, separate_line_spectra = sm.velocity_fold_spectrum_list(spectra, self.lines)
-        else:
+        elif isinstance(spectra, (sp.Spectrum1D, sp.SpectrumCollection)):
             new_spectra, separate_line_spectra = sm.velocity_fold_single_spectrum(spectra, self.lines)
+        else:
+            raise TypeError('Spectra needs to be either sp.SpectrumList, sp.Spectrum1D or sp.SpectrumCollection type')
         return new_spectra, separate_line_spectra
         
     
@@ -182,11 +230,16 @@ class _ProminentLines:
         if type(spectra)== sp.SpectrumList:
             new_spectra = sm.extract_region_in_list(spectra, self.wavelength_range)  
         elif type(spectra)== sp.Spectrum1D or type(spectra) == sp.SpectrumCollection:
-            new_spectra =  sm.extract_region_in_list(spectra, self.wavelength_range)
+            if isinstance(spectra, sp.Spectrum1D):
+                new_spectra = sm.extract_region_in_spectrum(spectra, self.wavelength_range)
+            elif isinstance(spectra, sp.SpectrumCollection):
+                raise NotImplementedError('SpectrumCollection not yet implemented')
         else:
             raise TypeError('Spectra needs to be either sp.SpectrumList, sp.Spectrum1D or sp.SpectrumCollection type')
         
         if normalization:
+            if isinstance(new_spectra, sp.Spectrum1D):
+                new_spectra = sp.SpectrumList([new_spectra])
             new_spectra = self.local_normalization(new_spectra,
                                                    **kwargs)
         if velocity_folding:
@@ -202,18 +255,18 @@ class _ProminentLines:
 #%% Prominent lines list
 Sodium_doublet = _ProminentLines(
     'Sodium',
-    [5889.950 *u.AA, 5895.924*u.AA],
-    sp.SpectralRegion(5886*u.AA, 5900*u.AA)
+    [5889.950 *u.AA, 5895.924*u.AA], #type: ignore
+    sp.SpectralRegion(5886*u.AA, 5900*u.AA) #type: ignore
     )
 
 Balmer_series = _ProminentLines(
     'Balmer series',
-    [6562.79*u.AA,
+    [6562.79*u.AA, # type: ignore
     #  4861.35*u.AA,
     #  4340.472 *u.AA,
     #  4101.734 * u.AA
      ],
-    (sp.SpectralRegion(6559*u.AA, 6566*u.AA) #+ 
+    (sp.SpectralRegion(6559*u.AA, 6566*u.AA) #+  #type: ignore
     #  sp.SpectralRegion(4855*u.AA, 4865*u.AA) + 
     #  sp.SpectralRegion(4335*u.AA, 4345*u.AA) + 
     #  sp.SpectralRegion(4095*u.AA, 4105*u.AA))
@@ -222,32 +275,32 @@ Balmer_series = _ProminentLines(
 
 Potassium_doublet = _ProminentLines(
     'Potassium',
-    [7664.8991*u.AA, 7698.9645*u.AA],
-    sp.SpectralRegion(7661*u.AA, 7668*u.AA) + sp.SpectralRegion(7695*u.AA,7702*u.AA)
+    [7664.8991*u.AA, 7698.9645*u.AA], #type: ignore
+    sp.SpectralRegion(7661*u.AA, 7668*u.AA) + sp.SpectralRegion(7695*u.AA,7702*u.AA) #type: ignore
     )
 
 Calcium_lines = _ProminentLines(
     'Calcium',
-    [3933.66*u.AA, 3968.47*u.AA],
-    sp.SpectralRegion(3930*u.AA, 3937*u.AA) + sp.SpectralRegion(3965*u.AA,3972*u.AA)
+    [3933.66*u.AA, 3968.47*u.AA],#type: ignore
+    sp.SpectralRegion(3930*u.AA, 3937*u.AA) + sp.SpectralRegion(3965*u.AA,3972*u.AA)#type: ignore
     )
 
 Manganium_lines = _ProminentLines(
     'Manganium',
-    [4030.76*u.AA, 4033.07*u.AA, 4034.49*u.AA],
-    sp.SpectralRegion(4026*u.AA, 4040*u.AA)
+    [4030.76*u.AA, 4033.07*u.AA, 4034.49*u.AA],#type: ignore
+    sp.SpectralRegion(4026*u.AA, 4040*u.AA)#type: ignore
     )
 
 Magnesium_lines = _ProminentLines(
     'Magnesium',
-    [4571.10*u.AA, 5167.32*u.AA, 5172.68*u.AA, 5183.60*u.AA],
-    sp.SpectralRegion(4568*u.AA, 4573*u.AA) + sp.SpectralRegion(5160*u.AA, 5190*u.AA)
+    [4571.10*u.AA, 5167.32*u.AA, 5172.68*u.AA, 5183.60*u.AA],#type: ignore
+    sp.SpectralRegion(4568*u.AA, 4573*u.AA) + sp.SpectralRegion(5160*u.AA, 5190*u.AA)#type: ignore
     )
 
 Lithium_lines = _ProminentLines(
     'Lithium',
-    [6707.76*u.AA],
-    sp.SpectralRegion(6700*u.AA, 6714*u.AA)
+    [6707.76*u.AA],#type: ignore
+    sp.SpectralRegion(6700*u.AA, 6714*u.AA)#type: ignore
     )
 
 RESOLVED_LINE_LIST = [
