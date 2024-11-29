@@ -253,12 +253,12 @@ def custom_transmission_units(system_parameters: para.SystemParametersComposite
 
     """
     # Constants for given system
-    Rp = system_parameters.Planet.radius.data * system_parameters.Planet.radius.unit
-    Rs = system_parameters.Star.radius.data * system_parameters.Star.radius.unit
+    Rp = system_parameters.Planet.radius.data * system_parameters.Planet.radius.unit # type: ignore
+    Rs = system_parameters.Star.radius.data * system_parameters.Star.radius.unit # type: ignore
     system_parameters._calculate_atmospheric_scale_height()
-    H = system_parameters.Planet.atmospheric_scale_height.to(u.km).value  # In km
-    rat = (Rs / Rp).decompose().value  # There is a rat in my code, oh no!
-    Rp_km = Rp.to(u.km).value  # Planet radius in km
+    H = system_parameters.Planet.atmospheric_scale_height.convert_unit_to(u.km).data * u.km  # In km type: ignore
+    rat = (Rs / Rp).decompose().value  # There is a rat in my code, oh no! type: ignore
+    Rp_km = Rp.to(u.km).value  # Planet radius in km type: ignore
 
     # Definition of units
     F_lam = u.def_unit(['', 'T', 'Transmitance', 'Transmitted flux'])
@@ -808,7 +808,7 @@ def mask_shift(new_x_axis: sp.SpectralAxis, mask: np.ndarray) -> sp.SpectralRegi
     Returns:
     sp.SpectralRegion: The combined spectral region after applying the mask shift.
     """
-    bin_edges = np.array(new_x_axis.bin_edges)
+    bin_edges = np.array(new_x_axis.bin_edges) * new_x_axis.bin_edges.unit
     a, b = bin_edges[:-1][mask], bin_edges[1:][mask]
     test_mask = a - np.roll(b, 1) == 0
     left_regions, right_regions = a[~test_mask], np.roll(
@@ -966,6 +966,9 @@ def _compare_masks(spectral_axis: sp.SpectralAxis,
     for masked_pixel in spectral_axis[mask]:
         ind = 0
         while True:
+            if masked_pixel < new_spectral_axis[0] and ind == 0:
+                new_mask[0] = True
+                break
             if masked_pixel < new_spectral_axis[ind]:
                 ind += 1
             else:
@@ -1324,7 +1327,7 @@ def replace_flux_units(spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCol
 @time_function
 @progress_tracker
 @save_and_load
-def cosmic_correction_all(spec_list, force_load=False, force_skip=False):
+def cosmic_correction_all(spec_list, force_load=False, force_skip=False) -> sp.SpectrumList:
     """
     Correction for cosmic for each night separately, using entire spectra list
 
@@ -1478,7 +1481,7 @@ def wiggle_correction(spectrum_list: sp.SpectrumList,
 
         x, y, yerr = binning_spectrum(item, 200, as_spectrum= False)
 
-        ind_mask_int = np.isfinite(y.to_numpy())  # type: ignore
+        ind_mask_int = np.isfinite(y)  # type: ignore
         cs = CubicSpline(x[ind_mask_int], y[ind_mask_int], extrapolate=False)
 
         interpolated_spectrum = sp.Spectrum1D(

@@ -371,7 +371,7 @@ def MCMC_model_Revolutions(system_parameters,
     spread_CCF = (upper_bound - lower_bound)
     
     aRs = (system_parameters.Planet.semimajor_axis.divide(system_parameters.Star.radius)).convert_unit_to(u.dimensionless_unscaled).data
-        
+    
     with basic_model:
         obliquity = pm.Uniform('obliquity',
                                lower=-180,
@@ -407,6 +407,7 @@ def MCMC_model_Revolutions(system_parameters,
         y_perpendicular = x_p * pm.math.sin(obliquity/180*np.pi) - y_p * pm.math.cos(obliquity/180*np.pi) #type: ignore
         
         local_stellar_velocity = x_perpendicular * veqsini
+        
         
         contrast_polynomial = 0
         fwhm_polynomial = 0

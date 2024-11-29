@@ -580,3 +580,80 @@ def plot_transmission_spectrum(transmission_list:list,
         
         figure_list.append([fig, [ax]])
     return figure_list
+
+def telluric_corrections(spectrum_list_A_corrected: sp.SpectrumList,
+                         spectrum_list_A_uncorrected: sp.SpectrumList,
+                         spectrum_list_B: sp.SpectrumList,
+                         telluric_profiles_list: sp.SpectrumList,
+                         spectral_region: sp.SpectralRegion = sp.SpectralRegion(5886*u.AA, 5900*u.AA)
+                         ):
+    
+    num_nights = len(np.unique([item.meta['Night'] for item in spectrum_list_A_corrected]))
+    # Extracting selected regions
+    spectrum_list_A_corrected = sm.extract_region_in_list(spectrum_list_A_corrected, spectral_region)
+    spectrum_list_A_uncorrected = sm.extract_region_in_list(spectrum_list_A_uncorrected, spectral_region)
+    spectrum_list_B = sm.extract_region_in_list(spectrum_list_B, spectral_region)
+    telluric_profiles_list = sm.extract_region_in_list(telluric_profiles_list, spectral_region)
+    
+    # Normalize list
+    spectrum_list_A_corrected = sm.normalize_list(spectrum_list_A_corrected)
+    spectrum_list_A_uncorrected = sm.normalize_list(spectrum_list_A_uncorrected)
+    
+    # Calculate master list 
+    master_A_skysubtracted = sm.calculate_master_list(spectrum_list_A_corrected,sn_type='None')
+    master_B = sm.calculate_master_list(spectrum_list_B,sn_type='None')
+    master_A_uncorrected = sm.calculate_master_list(spectrum_list_A_uncorrected,sn_type='None')
+    master_telluric = sm.calculate_master_list(telluric_profiles_list,sn_type='None')
+    flux_B_max = np.nanmax(np.asarray([item.flux for item in master_B]))
+    
+    # Plotting
+    mpl.use('TkAgg')
+    fig, axs = plt.subplots(num_nights, figsize=(12,16))
+    
+    for ni in range(num_nights):
+        axs[ni].set_ylim(0,1.2)
+        # Master of Fiber B
+        axs[ni].plot(master_B[ni+1].spectral_axis.value,
+                ((master_B[ni+1].flux.value / flux_B_max) / np.quantile((1- master_B[ni+1].flux.value / flux_B_max), 0.85))/4,
+                color= 'black',
+                alpha=.6,
+                )
+        
+        # Master of Fiber A uncorrected
+        axs[ni].errorbar(
+            master_A_uncorrected[ni+1].spectral_axis.value,
+            master_A_uncorrected[ni+1].flux.value / np.quantile(master_A_uncorrected[ni+1].flux.value, 0.85),
+            master_A_uncorrected[ni+1].uncertainty.array,
+            fmt='.',
+            color=sns.color_palette('dark')[3],
+            # lw=2,
+            alpha=.3
+            )
+        
+        # Master of Fiber A corrected
+        axs[ni].errorbar(
+            master_A_skysubtracted[ni+1].spectral_axis.value,
+            master_A_skysubtracted[ni+1].flux.value / np.quantile(master_A_skysubtracted[ni+1].flux.value, 0.85),
+            master_A_skysubtracted[ni+1].uncertainty.array,
+            fmt='.',
+            color=sns.color_palette('dark')[2],
+            # lw=2,
+            alpha=.3
+            )
+        
+        # Master of Telluric profiles
+        axs[ni].plot(master_telluric[ni+1].spectral_axis.value,
+                master_telluric[ni+1].flux,
+                color=sns.color_palette('dark')[0],
+                lw= 2,
+                zorder= 5,
+                #  alpha=.8
+                )
+        
+        axs[ni].legend(['Fiber B', 'Uncorrected', 'Corrected', 'Telluric profile'])
+
+    fig.supxlabel('Wavelength [$\AA$]')
+    fig.supylabel('Flux [unitless]')
+    fig.savefig('./figures/whitemode_normal/earth_correction.pdf')
+
+

@@ -809,48 +809,48 @@ class EquivalenciesTransmission:
     
     
     
-# class StellarModel():
-#     def stellar_model(self,
-#                       vacuum= False) -> sp.Spectrum1D:
-#         """
-#         Generate stellar model using expecto (wrapper for PHOENIX library).
+class StellarModel():
+    def stellar_model(self,
+                      vacuum= False) -> sp.Spectrum1D:
+        """
+        Generate stellar model using expecto (wrapper for PHOENIX library).
 
-#         Parameters
-#         ----------
-#         vacuum : bool, optional
-#             Whether to return stellar spectrum with vacuum wavelength, by default False. If False, returns wavelength in air.
+        Parameters
+        ----------
+        vacuum : bool, optional
+            Whether to return stellar spectrum with vacuum wavelength, by default False. If False, returns wavelength in air.
 
-#         Returns
-#         -------
-#         stellar_model : sp.Spectrum1D
-#             Stellar model extracted using expecto
+        Returns
+        -------
+        stellar_model : sp.Spectrum1D
+            Stellar model extracted using expecto
 
-#         """
+        """
         
-#         from expecto import get_spectrum
+        from expecto import get_spectrum
         
-#         stellar_spectrum = get_spectrum(
-#             T_eff=self.temperature.data,
-#             log_g=self.logg.data,
-#             cache=True,
-#             vacuum= vacuum
-#             )
+        stellar_spectrum = get_spectrum(
+            T_eff=self.temperature.data,
+            log_g=self.logg.data,
+            cache=True,
+            vacuum= vacuum
+            )
         
-#         stellar_spectrum = sp.Spectrum1D(
-#             spectral_axis= stellar_spectrum.spectral_axis,
-#             flux = stellar_spectrum.flux,
-#             uncertainty = StdDevUncertainty(
-#                 np.zeros_like(stellar_spectrum.flux)
-#                 ),
-#             mask = np.zeros_like(stellar_spectrum.flux),
-#             meta= {
-#                 'Type': 'Stellar model',
-#                 'Stellar type': self.stellar_type.data,
-#                 'Model': 'PHOENIX',
-#                 'Creation': 'expecto package',
-#                 },
-#             )
-#         return stellar_spectrum
+        stellar_spectrum = sp.Spectrum1D(
+            spectral_axis= stellar_spectrum.spectral_axis,
+            flux = stellar_spectrum.flux,
+            uncertainty = StdDevUncertainty(
+                np.zeros_like(stellar_spectrum.flux)
+                ),
+            mask = np.zeros_like(stellar_spectrum.flux),
+            meta= {
+                'Type': 'Stellar model',
+                'Stellar type': self.stellar_type.data,
+                'Model': 'PHOENIX',
+                'Creation': 'expecto package',
+                },
+            )
+        return stellar_spectrum
     
 class LimbDarkening:
     
