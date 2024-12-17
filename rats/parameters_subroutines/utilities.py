@@ -229,7 +229,7 @@ class CalculationSystem:
                                 )
         
         return (self.Planet.semimajor_axis.divide(self.Star.radius).convert_unit_to(u.dimensionless_unscaled)).multiply( #type:ignore
-            (
+            (#a/Rs * (sin(2pi * phase) * cos(lambda) + cos(2pi * phase) * cos(i) * sin(lambda)) * vsini
                 (ndutils._sin_NDDataArray(phase.multiply(2*np.pi*u.rad))).multiply(
                     ndutils._cos_NDDataArray(self.Planet.projected_obliquity) #type:ignore
                     ).add(

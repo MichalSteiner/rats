@@ -414,12 +414,15 @@ def observation_log(spectrum_list: sp.SpectrumList,
         red = sns.color_palette('pastel')[3]
         yellow = sns.color_palette('pastel')[8]
         green = sns.color_palette('pastel')[2]
-
+        x_lowest, x_highest = ax.get_xlim()
+        
         ax.axvspan(x_lowest, system_parameters.Ephemeris.contact_T1.data, color=red, alpha=0.4, zorder=0.5)
         ax.axvspan(system_parameters.Ephemeris.contact_T1.data,system_parameters.Ephemeris.contact_T2.data, color=yellow, alpha=0.4, zorder=0.5)
         ax.axvspan(system_parameters.Ephemeris.contact_T2.data,system_parameters.Ephemeris.contact_T3.data, color=green, alpha=0.4, zorder=0.5)
         ax.axvspan(system_parameters.Ephemeris.contact_T3.data,system_parameters.Ephemeris.contact_T4.data, color=yellow, alpha=0.4, zorder=0.5)
         ax.axvspan(system_parameters.Ephemeris.contact_T4.data,x_highest, color=red, alpha=0.4, zorder=0.5)
+        
+        ax.set_xlim(x_lowest, x_highest)
         
         for contact in [system_parameters.Ephemeris.contact_T1.data,
                         system_parameters.Ephemeris.contact_T2.data,

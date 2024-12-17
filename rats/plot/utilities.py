@@ -256,5 +256,5 @@ def _marker_instrument(Instruments: list) -> list:
 
 def _color_night(Night_number: int) -> tuple:
     """Defines a color for each night uniquely"""
-    return sns.color_palette('bright')[Night_number - 1]
+    return sns.color_palette('dark')[Night_number - 1]
 
