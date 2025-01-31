@@ -368,7 +368,7 @@ def observation_log(spectrum_list: sp.SpectrumList,
     [plt.Figure, plt.Axes]
         _description_
     """
-    fig, axs = plt.subplots(3, figsize=(24,32))
+    fig, axs = plt.subplots(3, figsize=(6, 8))
 
     # Gain observation log information
     Phase = [spectrum.meta['Phase'].data for spectrum in spectrum_list]
@@ -385,10 +385,10 @@ def observation_log(spectrum_list: sp.SpectrumList,
     
     # Scatter plot of each individual exposure
     for x_phase, y_airmass, y_seeing, y_snr, custom_marker, custom_color in zip(Phase, Airmass, Seeing, Average_SN, markers_spectrum, color_spectrum):
-        axs[0].scatter(x_phase, y_airmass, marker= custom_marker, color=custom_color, label='_nolegend_')
+        axs[0].scatter(x_phase, y_airmass, marker= custom_marker, color=custom_color, label='_nolegend_', s=20)
         axs[0].set_ylim(2.2, .9)
-        axs[1].scatter(x_phase, y_seeing, marker= custom_marker, color=custom_color, label='_nolegend_')
-        axs[2].scatter(x_phase, y_snr, marker= custom_marker,  color=custom_color, label='_nolegend_')
+        axs[1].scatter(x_phase, y_seeing, marker= custom_marker, color=custom_color, label='_nolegend_', s=20)
+        axs[2].scatter(x_phase, y_snr, marker= custom_marker,  color=custom_color, label='_nolegend_', s=20)
 
     # Fake (empty) plot for legend.
     night_list, indices = np.unique(np.asarray(Night_num), return_index=True)
@@ -402,11 +402,11 @@ def observation_log(spectrum_list: sp.SpectrumList,
         axs[2].scatter([], [], marker = marker_unique[ind], color= ut._color_night(night), label=f'Night {spec}, Instrument: {instrument[ind]}')
 
     # Legends and labels 
-    axs[0].legend(bbox_to_anchor=(0.00, 1.30), loc='upper left')
-    axs[0].set_ylabel('Airmass')
-    axs[1].set_ylabel('Seeing')
-    axs[2].set_ylabel('Average S/N')
-    axs[2].set_xlabel('Phase')
+    # axs[0].legend(bbox_to_anchor=(0.00, 1.30), loc='upper left')
+    axs[0].set_ylabel('Airmass [1]')
+    axs[1].set_ylabel('Seeing ["]')
+    axs[2].set_ylabel('Average S/N [1]')
+    axs[2].set_xlabel('Phase [1]')
     x_lowest, x_highest = axs[0].get_xlim()
 
     # Contact points and transit value color fill
@@ -433,6 +433,7 @@ def observation_log(spectrum_list: sp.SpectrumList,
     
     # Saving figure
     name_planet = system_parameters.Planet.name.replace(' ','').replace('-', '_')
+    fig.tight_layout()
     fig.savefig(f'figures/Observation_plot_{name_planet}.pdf')
 
     return fig, axs

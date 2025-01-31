@@ -659,13 +659,26 @@ def plot_instrinsic_residuals_CCF(CCF_intrinsic,
         pcm = plot_CCF_night(CCF_intrinsic, ni+1, system_parameters, axs[ni,0])
         pcm_list_left.append(pcm)
 
+        aRs = (system_parameters.Planet.semimajor_axis.divide(system_parameters.Star.radius)).convert_unit_to(u.dimensionless_unscaled).data
+        veqsini = revolutions_result.posterior.veqsini.mean().to_numpy()
+        obliquity = revolutions_result.posterior.obliquity.mean().to_numpy()
+        
+        phases = np.linspace(axs[ni,0].get_ylim()[0], axs[ni,0].get_ylim()[1], 1000)
+        x_p = aRs * np.sin(2*np.pi * phases) # type: ignore
+        y_p = aRs * np.cos(2*np.pi * phases) * np.cos(system_parameters.Planet.inclination.data / 180*np.pi) #type: ignore
+        x_perpendicular = x_p* np.cos(obliquity/180*np.pi) - y_p * np.sin(obliquity/180*np.pi) #type: ignore
+        
+        local_stellar_velocity = x_perpendicular * veqsini
+        
+        axs[ni,0].plot(local_stellar_velocity, phases, color='black', ls='dotted')
+        
     # Plot right column (residuals)
     pcm_list_right = []
     for ni in range(num_night):
         pcm = plot_residual_CCF_night(CCF_intrinsic, ni+1, system_parameters, 
                                      revolutions_result, axs[ni,1])
         pcm_list_right.append(pcm)
-
+        axs[ni,1].plot(local_stellar_velocity, phases, color='black', ls='dotted')
     # Adjust layout and add colorbars
     fig.subplots_adjust(right=0.85, wspace=0.4)
 
@@ -676,9 +689,6 @@ def plot_instrinsic_residuals_CCF(CCF_intrinsic,
     cax.xaxis.set_ticks_position('top')
     cax.xaxis.set_label_position('top')
     
-    # cbar_ax_left = fig.add_axes([0.45, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
-    # fig.colorbar(pcm_list_left[0], cax=cbar_ax_left)
-
     # Right colorbar (for residuals)
     divider = make_axes_locatable(axs[0,1])
     cax = divider.append_axes("top", size="5%", pad=0.0)

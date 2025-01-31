@@ -650,7 +650,7 @@ def telluric_corrections(spectrum_list_A_corrected: sp.SpectrumList,
                 #  alpha=.8
                 )
         
-        axs[ni].legend(['Fiber B', 'Uncorrected', 'Corrected', 'Telluric profile'])
+        axs[ni].legend(['Fiber B','Telluric profile', 'Uncorrected', 'Corrected', ])
 
     fig.supxlabel('Wavelength [$\AA$]')
     fig.supylabel('Flux [unitless]')

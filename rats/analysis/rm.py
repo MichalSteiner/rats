@@ -432,7 +432,6 @@ def MCMC_model_Revolutions(system_parameters,
                            fwhm_order: int | None = 0,
                            contrast_phase: str = 'Phase',
                            fwhm_phase: str = 'Phase',
-                           assymetry: bool = False,
                            draws: int = 15000,
                            tune: int = 15000,
                            force_skip: bool = False,
@@ -451,8 +450,6 @@ def MCMC_model_Revolutions(system_parameters,
     upper_bound = CCF_intrinsic_list[0].spectral_axis[-1].value
     spread_CCF = (upper_bound - lower_bound)
     
-    (1 + erf(a * z / np.sqrt(2)))
-    
     
     night_polynomial = {}
 
@@ -469,9 +466,6 @@ def MCMC_model_Revolutions(system_parameters,
     
     contrast_coefficients = add_contrast_model(basic_model, CCF_intrinsic_list, contrast_order)
     fwhm_coefficients = add_fwhm_model(basic_model, CCF_intrinsic_list, fwhm_order)
-    
-    if assymetry:
-        assymetry_factors = add_assymetry_factor(basic_model, CCF_intrinsic_list)
     
     
     for night in np.unique([item.meta['Night'] for item in CCF_intrinsic_list]):
@@ -528,11 +522,14 @@ def MCMC_model_Revolutions(system_parameters,
             draws= draws,
             tune= tune,
             chains= 30,
-            target_accept=0.9
+            target_accept=0.9,
+            idata_kwargs= {
+                'log_likelihood':True
+            }
         )
     
     logger.info("Hello there!")
-    return idata
+    return idata, basic_model
 
 
 @save_and_load
