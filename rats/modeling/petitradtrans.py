@@ -1,3 +1,43 @@
+"""
+This module provides functions for modeling planetary atmospheres using the petitRADTRANS package.
+
+Functions:
+- _airtovac(wlnm):
+    Converts air wavelengths to vacuum wavelengths.
+
+- _vactoair(wlnm):
+    Converts vacuum wavelengths to air wavelengths.
+
+- _get_planet(planet_name: str) -> planet.Planet:
+    Gets planet parameters from the planet name.
+
+- _get_edges_wavelength(spectral_axis: sp.SpectralAxis) -> list:
+    Gets edges of the wavelengths to use for the model from the spectral axis.
+
+- _define_atmosphere_model(pressures: np.ndarray, line_species: list, wavelength_boundaries: list | sp.SpectralAxis = [0.3, 0.8], rayleigh_species: list | None = None, gas_continuum_contributors: list | None = None, **kwargs) -> prt.Radtrans:
+    Defines an atmosphere Radtrans model.
+
+- _T_P_profile_guillot(SystemParameters: rats.parameters.SystemParametersComposite, atmosphere: prt.Radtrans) -> np.ndarray:
+    Creates a T-P profile using the Guillot approximation.
+
+- _get_mass_fraction(line_species: list, temperatures: np.ndarray, value: float = 1E-7) -> dict:
+    Gets a mass fraction for related species.
+
+- _calculate_transmission_model(atmosphere: prt.Radtrans, spectral_axis: sp.SpectralAxis, temperatures: np.ndarray, mass_fractions: dict, mean_molar_masses: np.ndarray, SystemParameters: rats.parameters.SystemParametersComposite, reference_pressure: float = 10E-2) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    Calculates the transmission model based on the input parameters.
+
+- _remove_continuum(spectral_axis: sp.SpectralAxis, flux: u.Quantity) -> u.Quantity:
+    Removes the continuum from the template.
+
+- create_template(spectral_axis: sp.SpectralAxis, SystemParameters: rats.parameters.SystemParametersComposite, pressures: np.ndarray = np.logspace(-10,2,130), line_species: list = [], reference_pressure: float = 10E-2, abundance: float = 1E-7) -> sp.Spectrum1D:
+    Generates a model template for given species using the Guillot TP profile.
+
+- create_templates(spectral_axis: sp.SpectralAxis, SystemParameters: rats.parameters.SystemParametersComposite, pressures: np.ndarray = np.logspace(-10,2,130), line_species: list = [], reference_pressure: float = 10E-2, abundance: float = 1E-7, force_recalculate: bool = False) -> sp.SpectrumList:
+    Generates a list of templates for given species list.
+
+- create_all_templates(spectral_axis: sp.SpectralAxis, SystemParameters: rats.parameters.SystemParametersComposite, pressures: np.ndarray = np.logspace(-10,2,130), reference_pressure: float = 10E-2, abundance: float = 1E-7, force_recalculate: bool = False) -> sp.SpectrumList:
+    Generates a list of templates for all petitRADTRANS species individually.
+"""
 
 import petitRADTRANS.radtrans as prt
 import petitRADTRANS.planet as planet
@@ -481,6 +521,20 @@ def create_all_templates(spectral_axis: sp.SpectralAxis,
                                    abundance= abundance,
                                    force_recalculate=force_recalculate)
     return templates
+
+# List of undocumented functions for further review:
+# - _airtovac
+# - _vactoair
+# - _get_planet
+# - _get_edges_wavelength
+# - _define_atmosphere_model
+# - _T_P_profile_guillot
+# - _get_mass_fraction
+# - _calculate_transmission_model
+# - _remove_continuum
+# - create_template
+# - create_templates
+# - create_all_templates
 
 
 

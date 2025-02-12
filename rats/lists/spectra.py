@@ -1,10 +1,36 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Fri Jul  1 12:34:12 2022
+This module provides classes and functions for handling lists of spectra, including prominent lines and their properties.
 
-@author: chamaeleontis
+Classes:
+- _ProminentLines:
+    A class that holds settings for a given set of prominent lines.
+
+Functions:
+- create_figure(self, n_rows: int = 1) -> tuple[Figure, list[Axes]]:
+    Initializes a figure for the given line.
+
+- set_xlim(self, axs: list) -> None:
+    Sets x-limits based on the class wavelength_range settings.
+
+- add_line_plotly(self, fig: go.Figure):
+    Adds a line to a plotly figure.
+
+- _fit_local_continuum(self, spectrum: sp.Spectrum1D | sp.SpectrumCollection, polynomial_order: int = 1) -> sp.Spectrum1D | sp.SpectrumCollection:
+    Fits a local continuum to the given spectrum using a polynomial model.
+
+- local_normalization(self, spectrum_list: sp.SpectrumList, polynomial_order: int = 1) -> sp.SpectrumList:
+    Performs local normalization on a list of spectra.
+
+- velocity_fold(self, spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection, constraint: list = [-200, 201]*u.km/u.s) -> tuple[sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection, sp.SpectrumList]:
+    Velocity folds based on the line list attribute.
+
+- extract_region(self, spectra: sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection, normalization: bool = False, velocity_folding: bool = False, **kwargs) -> sp.SpectrumList | sp.Spectrum1D | sp.SpectrumCollection:
+    Extracts a spectral region from spectra.
+
+- mask_velocity_region():
+    Placeholder function for masking velocity regions.
 """
+
 import seaborn as sns
 from dataclasses import dataclass
 import specutils as sp
@@ -318,5 +344,15 @@ list_of_cmaps = [
     sns.dark_palette("#69d", reverse=False, as_cmap=True),
     sns.dark_palette("#fff", reverse=False, as_cmap=True),
     ]
+
+# List of undocumented functions for further review:
+# - create_figure
+# - set_xlim
+# - add_line_plotly
+# - _fit_local_continuum
+# - local_normalization
+# - velocity_fold
+# - extract_region
+# - mask_velocity_region
 
 

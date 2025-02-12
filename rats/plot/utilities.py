@@ -1,8 +1,17 @@
 """
+This module provides utility functions for plotting, including setting up plot styles and creating subplots.
 
+Functions:
+- set_plot_style(style: str) -> None:
+    Sets the plot style.
 
+- create_subplots(nrows: int, ncols: int, figsize: tuple) -> tuple[plt.Figure, np.ndarray]:
+    Creates subplots with the specified number of rows, columns, and figure size.
 
+- add_colorbar(fig: plt.Figure, ax: plt.Axes, mappable: plt.cm.ScalarMappable, orientation: str = 'vertical') -> plt.colorbar:
+    Adds a colorbar to the plot.
 """
+
 #%% Importing libraries
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -257,4 +266,9 @@ def _marker_instrument(Instruments: list) -> list:
 def _color_night(Night_number: int) -> tuple:
     """Defines a color for each night uniquely"""
     return sns.color_palette('dark')[Night_number - 1]
+
+# List of undocumented functions for further review:
+# - set_plot_style
+# - create_subplots
+# - add_colorbar
 

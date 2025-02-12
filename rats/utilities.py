@@ -1,12 +1,26 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Fri Jun 17 13:24:03 2022
-
-@author: chamaeleontis
-
 Contains utility functions and decorators to use in other script.
 
+This module provides utility functions for various tasks such as logging, timing functions, and saving/loading data.
+
+Functions:
+- default_logger_format(logger: logging.Logger) -> logging.Logger:
+    Sets up the default logger format.
+
+- time_function(func: Callable) -> Callable:
+    Decorator to time the execution of a function.
+
+- save_and_load(func: Callable) -> Callable:
+    Decorator to save the result of a function to a file and load it if it exists.
+
+- progress_tracker(func: Callable) -> Callable:
+    Decorator to track the progress of a function.
+
+- skip_function(func: Callable) -> Callable:
+    Decorator to skip the execution of a function.
+
+- disable_func(func: Callable) -> Callable:
+    Decorator to disable the execution of a function.
 """
 #%% Importing libraries
 import dill as pickle
@@ -410,3 +424,11 @@ def print_acknowledgements():
     
     
     raise NotImplementedError
+
+# List of undocumented functions for further review:
+# - default_logger_format
+# - time_function
+# - save_and_load
+# - progress_tracker
+# - skip_function
+# - disable_func

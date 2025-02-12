@@ -1,8 +1,24 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Sep  6 13:34:34 2021
+This module provides functions for manipulating spectra, including extracting regions, velocity folding, and normalizing spectra.
 
-@author: Chamaeleontis
+Functions:
+- extract_region_in_list(spectrum_list: sp.SpectrumList, region: sp.SpectralRegion) -> sp.SpectrumList:
+    Extracts a specific region from a list of spectra.
+
+- extract_region_in_spectrum(spectrum: sp.Spectrum1D, region: sp.SpectralRegion) -> sp.Spectrum1D:
+    Extracts a specific region from a single spectrum.
+
+- velocity_fold_spectrum_list(spectrum_list: sp.SpectrumList, lines: list) -> tuple[sp.SpectrumList, sp.SpectrumList]:
+    Velocity folds a list of spectra based on given lines.
+
+- velocity_fold_single_spectrum(spectrum: sp.Spectrum1D, lines: list) -> tuple[sp.Spectrum1D, sp.SpectrumList]:
+    Velocity folds a single spectrum based on given lines.
+
+- normalize_spectrum(spectrum: sp.Spectrum1D) -> sp.Spectrum1D:
+    Normalizes a single spectrum.
+
+- normalize_spectrum_list(spectrum_list: sp.SpectrumList) -> sp.SpectrumList:
+    Normalizes a list of spectra.
 """
 
 # %% Importing libraries

@@ -1,3 +1,17 @@
+"""
+This module provides functions for plotting spectra, including plotting individual spectra, overplotting multiple spectra, and creating animations.
+
+Functions:
+- plot_spectrum(spectrum: sp.Spectrum1D, ax: plt.Axes, **kwargs) -> None:
+    Plots a single spectrum on the given axes.
+
+- overplot_spectra(spectra: sp.SpectrumList, ax: plt.Axes, **kwargs) -> None:
+    Overplots multiple spectra on the given axes.
+
+- create_animation(spectra: sp.SpectrumList, output_file: str, **kwargs) -> None:
+    Creates an animation of the spectra and saves it to the specified output file.
+"""
+
 import matplotlib.pyplot as plt
 from functools import singledispatch
 from dataclasses import dataclass
@@ -437,3 +451,8 @@ def observation_log(spectrum_list: sp.SpectrumList,
     fig.savefig(f'figures/Observation_plot_{name_planet}.pdf')
 
     return fig, axs
+
+# List of undocumented functions for further review:
+# - plot_spectrum
+# - overplot_spectra
+# - create_animation

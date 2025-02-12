@@ -19,7 +19,57 @@ The S1D and S2D spectra are providing masking pixels with negative flux and nans
 
 Currently the tested version of DRS pipeline are 3.0.0 of ESPRESSO DRS. If different format is used, will raise an exception. You can try and test other version of DRS by commenting/removing the DRS check, but the pipeline is not tested there.
 
+Functions:
+- _replace_nonpositive_with_nan(spectrum: sp.Spectrum1D | sp.SpectrumCollection) -> sp.Spectrum1D | sp.SpectrumCollection:
+    Replaces non-positive values in the spectrum with NaNs.
 
+- load_spectrum(filename: str) -> sp.Spectrum1D | sp.SpectrumCollection:
+    Loads a single spectrum based on the filename.
+
+- load_S1D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
+    Loads an S1D spectrum.
+
+- load_S2D_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.SpectrumCollection:
+    Loads an S2D spectrum.
+
+- load_CCF_spectrum(fits_hdulist: fits.hdu.hdulist.HDUList) -> sp.Spectrum1D:
+    Loads a CCF spectrum.
+
+- load_all(main_directory: str, spectra_format: str, fiber: str, instrument_list: list | None = None, force_load: bool = False, force_skip: bool = False, pkl_name: str | None = None) -> sp.SpectrumList:
+    Loads all spectra from all instruments and all nights in one spectrum list.
+
+- load_instrument(instrument_directory: str, spectra_format: str, fiber: str) -> sp.SpectrumList:
+    Loads all spectra observed with a given instrument.
+
+- load_night(night_directory: str, spectra_format: str, fiber: str) -> sp.SpectrumList:
+    Loads all spectra from a single night of a single instrument's observations.
+
+- _numbering_nights(spectrum_list: sp.SpectrumList):
+    Indexes the spectrum list with night indices, spectrum indices within a single night, and spectra indices.
+
+- _correct_dispersion_S2D(spectral_axis: sp.spectra.spectral_axis.SpectralAxis, flux: u.Quantity, uncertainty: astropy.nddata.StdDevUncertainty) -> u.Quantity:
+    Corrects for the dispersion effect on the S2D spectra.
+
+- _find_UT(header: fits.header.Header) -> str:
+    Returns which UT was used for the current spectrum of ESPRESSO.
+
+- _find_nb_orders(header: fits.header.Header) -> int:
+    Returns the number of orders for the current spectrum.
+
+- _check_DRS_version(DRS: str):
+    Checks the version of the DRS used.
+
+- _basic_meta_parameters() -> dict:
+    Provides a full set of meta parameters with some undefined.
+
+- _find_unit(header_TUNITx_value: str) -> u.Unit:
+    Finds the unit based on a TUNITx keyword in the header of the data table.
+
+- _load_meta_from_header(header: fits.header.Header) -> dict:
+    Loads meta parameters from the header.
+
+- _mask_flux_array(flux: u.Quantity) -> np.ndarray:
+    Creates a mask of the flux array assuming finite and positive (non-zero) values.
 """
 
 #%% Importing libraries
@@ -766,3 +816,22 @@ if __name__ == '__main__':
             logger.info('Loaded '+ str(len(spectra_list)) + ' number of spectra')
             logger.info('    Succesfully loaded format:' + spectra_member.name + ' and fiber: ' + fiber_member.name)
     logger.info('Test succesful. Check logs for issues.')
+
+# List of undocumented functions for further review:
+# - _replace_nonpositive_with_nan
+# - load_spectrum
+# - load_S1D_spectrum
+# - load_S2D_spectrum
+# - load_CCF_spectrum
+# - load_all
+# - load_instrument
+# - load_night
+# - _numbering_nights
+# - _correct_dispersion_S2D
+# - _find_UT
+# - _find_nb_orders
+# - _check_DRS_version
+# - _basic_meta_parameters
+# - _find_unit
+# - _load_meta_from_header
+# - _mask_flux_array
