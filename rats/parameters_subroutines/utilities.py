@@ -29,17 +29,19 @@ Functions:
 
 # %% Importing libraries
 import logging
-from functools import lru_cache
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
+
 import astropy.constants as con
 import astropy.units as u
-import astropy
-from astropy.nddata import NDData, StdDevUncertainty, NDDataArray
+from astropy.nddata import StdDevUncertainty, NDDataArray
 import specutils as sp
+
 from rats.utilities import default_logger_format, time_function, save_and_load
 import rats.ndarray_utilities as ndutils
+
 # %% Setting up logging
 logger = logging.getLogger(__name__)
 logger = default_logger_format(logger)
@@ -829,11 +831,41 @@ class CalculationTransitLength:
 
 
 class EquivalenciesTransmission:
-
     def _custom_transmission_units(self):
         """
-        Defines transmission spectrum specific units for given planet. Conversion equations are available at https://www.overleaf.com/read/gkdtkqvwffzn
+        Defines transmission spectrum specific units for a given planet and sets up the equivalencies between them.
+
+        This method defines custom units related to the transmission spectrum of a planet and establishes the 
+        equivalencies between these units. The conversion equations are based on the specific planetary and stellar 
+        parameters and are available at https://www.overleaf.com/read/gkdtkqvwffzn.
+
+        Attributes
+        ----------
+        unit_Transmission : astropy.units.Unit
+            Custom unit for transmission.
+        unit_Absorption : astropy.units.Unit
+            Custom unit for excess atmospheric absorption.
+        unit_PlanetRadius : astropy.units.Unit
+            Custom unit for planetary radius.
+        unit_TransitDepth : astropy.units.Unit
+            Custom unit for wavelength-dependent transit depth.
+        unit_NumberOfAtmosphericScaleHeights : astropy.units.Unit
+            Custom unit for the number of atmospheric scale heights.
+
+        Notes
+        -----
+        The method sets up an equivalency between the defined units using the planetary and stellar parameters 
+        such as the planetary radius, stellar radius, and atmospheric scale height. The equivalencies allow for 
+        conversions between different units related to the transmission spectrum.
+
+        Examples
+        --------
+        To use the defined units and equivalencies, you can call this method within a class that has the necessary 
+        planetary and stellar attributes defined:
+
+        >>> self._custom_transmission_units()
         """
+
         # TODO Check everything works for now.
         # Constants for given system
         Rp, Rs = self.Planet.radius.data * self.Planet.radius.unit, self.Star.radius.data * \
@@ -956,22 +988,34 @@ class StellarModel():
 
 
 class LimbDarkening:
-
-    def calculate_limb_darkening_coefficients(self):
+    def calculate_limb_darkening_coefficients(self) -> [float, float]:
         """
-        Response functions can be downloaded here: http://svo2.cab.inta-csic.es/theory/fps/index.php?id=SLOAN/SDSS.u&&mode=browse&gname=SLOAN&gname2=SDSS#filter
+        Calculate the limb darkening coefficients for a star.
 
-        Better way is to create a proxy-filter for given wavelength range of an instrument.
+        This method calculates the limb darkening coefficients using the ATLAS and PHOENIX databases.
+        It uses the `get_lds_with_errors_v3` module from LDCU to perform the calculations and returns the coefficients
+        for the quadratic law, merged, and all pass bands.
 
-        TODO: Create a proxy-filter based on instrument data
+        Returns
+        -------
+        tuple
+            A tuple containing two limb darkening coefficients for the quadratic law, merged, and all pass bands.
+
+        Notes
+        -----
+        This method appends the LDCU location to the system path and imports the `get_lds_with_errors_v3` module.
+        It queries the ATLAS and PHOENIX databases to build up a grid of available models and computes the limb-darkening
+        coefficients. The results are printed and logged.
+        Raises
+        ------
+        ImportError
+            If the `get_lds_with_errors_v3` module cannot be imported.
         """
+
         import sys
         from uncertainties import ufloat
-        # DOCUMENTME
-        # FIXME: This is dumb!
         from ..setup_filenames import LDCU_location
         sys.path.append(LDCU_location)
-        # sys.path.append('/media/chamaeleontis/Observatory_main/Code/LDCU-main')
 
         import get_lds_with_errors_v3 as glds  # type:ignore
 
@@ -1018,15 +1062,26 @@ class ModellingLightCurve:
                           force_skip=False,
                           pkl_name='light_curve_model.pkl'):
         """
-        Creates a model light-curve with quadratic limb-darkening.
+        Generates a model light curve for the transit of a planet.
 
-        The limb-darkening coefficients are calculated with LDCU.
-
-
+        Parameters
+        ----------
+        force_load : bool, optional
+            If True, forces the loading of precomputed limb darkening coefficients from a pickle file.
+            Default is False.
+        force_skip : bool, optional
+            If True, skips the computation of limb darkening coefficients and uses precomputed values.
+            Default is False.
+        pkl_name : str, optional
+            The name of the pickle file to save/load the limb darkening coefficients.
+            Default is 'light_curve_model.pkl'.
+        Returns
+        -------
+        None
+            The method sets the light curve parameters in the instance attributes.
         """
 
         import batman
-        # DOCUMENTME
         try:
             import pickle
             with open('./saved_data/limb_darkening_coefficients.pkl', 'rb') as input_file:
@@ -1066,7 +1121,20 @@ class ModellingLightCurve:
 
     def add_transit_depth_value(self,
                                 spectrum_list: sp.SpectrumList):
-        # DOCUMENTME
+        """
+        Adds transit depth values to the metadata of each spectrum in the given spectrum list.
+
+        This function calculates the transit depth using the batman package and adds the resulting
+        light curve flux and delta values to the metadata of each spectrum in the provided spectrum list.
+
+        Parameters:
+        -----------
+        spectrum_list : sp.SpectrumList
+            A list of spectrum objects, each containing metadata with 'BJD' (Barycentric Julian Date) values.
+        Returns:
+        --------
+        None
+        """
         import batman
 
         t = np.asarray(
